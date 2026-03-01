@@ -1,0 +1,32 @@
+# Interface Contract: End-Use Dimensions
+#
+# Section 1) Scope
+# - Defines modeled end-use axis and optional detailed end-use alias axis.
+#
+# Section 2) Required keys
+# - dimension: {name, symbol}
+# - end_uses: non-empty list used by model dimensions and exogenous demand shares.
+#
+# Section 3) Optional keys
+# - end_use_detailed_dimension
+# - end_use_detailed
+#
+dimension:
+  name: end_use
+  symbol: e
+
+end_use_detailed_dimension:
+  name: end_use_detailed
+  symbol: ed
+
+end_uses:
+  - construction
+  - computers_and_precision_instruments
+  - electrical_equipment
+  - machinery_and_equipment
+  - motor_vehicles_trailers_and_semi_trailers
+  - other_transport_equipment
+  - products_nec
+
+# Reserved for expanded MFA system definition.
+end_use_detailed: []

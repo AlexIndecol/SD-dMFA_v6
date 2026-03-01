@@ -1,0 +1,102 @@
+# Interface Contract: Calibration Policy
+#
+# Section 1) Scope
+# - Controls objective, windows, bounds, optimization settings, and outputs
+#   for calibration scripts.
+#
+# Section 2) Required top-level keys
+# - version, objective, windows, parameters, optimization, selection,
+#   constraints, outputs.
+#
+version: 1
+
+objective:
+  id: weighted_stock_rmse
+  target_variable: stock_in_use
+  target_source: data/exogenous/stock_in_use.csv
+  description: >
+    Minimize weighted RMSE between modeled and observed stock-in-use
+    over the calibration training window.
+  aggregation:
+    over_end_uses: sum
+    over_material_region: weighted_mean
+    weight_basis: mean_observed_stock
+  missing_data:
+    policy: ignore_nan_pairs
+    min_required_years_per_material_region: 20
+
+windows:
+  train:
+    start_year: 1870
+    end_year: 1999
+  validation:
+    start_year: 2000
+    end_year: 2019
+  reporting_holdout:
+    start_year: 2020
+    end_year: 2100
+
+parameters:
+  mfa:
+    fabrication_yield:
+      path: mfa_parameters.fabrication_yield
+      initial: 0.8823678465694136
+      bounds: [0.85, 0.99]
+    collection_rate:
+      path: mfa_parameters.collection_rate
+      initial: 0.6447636037327168
+      bounds: [0.05, 0.95]
+    recycling_yield:
+      path: mfa_parameters.recycling_yield
+      initial: 0.6164764329098924
+      bounds: [0.40, 0.98]
+    reman_yield:
+      path: strategy.reman_yield
+      initial: 0.7168092328464711
+      bounds: [0.50, 0.99]
+    lifetime_multiplier:
+      path: strategy.lifetime_multiplier
+      initial: 1.2265966624316869
+      bounds: [0.70, 1.50]
+
+optimization:
+  global_search:
+    method: differential_evolution
+    max_evaluations: 120
+    popsize: 8
+    seed: 42
+  local_refinement:
+    enabled: false
+    method: nelder_mead
+    max_evaluations: 10
+  stopping:
+    min_improvement: 5.0e-4
+    patience_rounds: 2
+
+selection:
+  # Search is driven by train error; final model selection is driven by validation error.
+  search_metric: train_weighted_rmse
+  primary_metric: validation_weighted_rmse
+  fallback_metric: train_weighted_rmse
+  constraints:
+    min_pairs_train: 9
+    min_pairs_validation: 9
+    # Set to null to disable threshold gating; set numeric values to enforce.
+    max_validation_weighted_rmse: null
+    max_validation_weighted_nrmse: null
+    max_train_weighted_rmse: null
+    max_train_weighted_nrmse: null
+
+constraints:
+  hard:
+    - "0 < fabrication_yield <= 1"
+    - "0 <= collection_rate <= 1"
+    - "0 <= recycling_yield <= 1"
+    - "0 < reman_yield <= 1"
+    - "lifetime_multiplier > 0"
+
+outputs:
+  save_trial_history_csv: true
+  save_best_config_patch_yml: true
+  save_validation_summary_csv: true
+  autosave_every_evaluations: 1

@@ -1,0 +1,23 @@
+# Interface Contract: Run Overlay (extends _core)
+#
+# Section 1) Scope
+# - Thin run profile that extends canonical defaults from configs/runs/_core.yml.
+# - Intended to set scenario pack includes and profile-specific deltas only.
+#
+# Section 2) Required keys
+# - name
+# - extends
+#
+# Section 3) Allowed override blocks
+# - includes.scenarios
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation,
+#   shocks, variants, sd_heterogeneity
+#
+name: "Tin–Zinc–Nickel | EU27–China–RoW | Coupled SD–dMFA (loose iterative | mvp)"
+extends: ./_core.yml
+
+includes:
+  scenarios: ../scenarios/mvp/*.yml
+
+strategy:
+  refinery_stockpile_release_rate: 0.15

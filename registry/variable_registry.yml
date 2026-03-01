@@ -1,0 +1,125 @@
+# Interface Contract: Exogenous Variable Registry
+#
+# Section 1) Scope
+# - Registers all exogenous input files used by loaders and validators.
+#
+# Section 2) Entry schema
+# - variable_id -> {path, required, columns[, unit, constraints, notes]}
+#
+# Section 3) Required entry fields
+# - path: repo-relative file path
+# - required: boolean
+# - columns: ordered column contract for source file
+#
+# Section 4) Validation notes
+# - Declared columns must match file headers exactly.
+# - Keep units/constraints explicit where validation depends on them.
+
+final_demand:
+  path: data/exogenous/final_demand.csv
+  required: true
+  columns: [year, material, region, value]
+  unit: t_per_year
+
+end_use_shares:
+  path: data/exogenous/end_use_shares.csv
+  required: true
+  columns: [year, material, region, end_use, value]
+  unit: share
+  constraints:
+    - "nonnegative"
+    - "normalize_within_year_material_region"
+
+primary_refined_output:
+  path: data/exogenous/primary_refined_output.csv
+  required: true
+  columns: [year, material, region, value]
+  unit: t_per_year
+  notes:
+    - "Domestic primary refined metal output."
+    - "Refining-anchor input for primary availability."
+
+primary_refined_net_imports:
+  path: data/exogenous/primary_refined_net_imports.csv
+  required: true
+  columns: [year, material, region, value]
+  unit: t_per_year
+  notes:
+    - "Net imports of primary refined metal into the region."
+    - "May be negative for net exporters."
+    - "Primary available to refining is computed as max(0, primary_refined_output + primary_refined_net_imports)."
+
+stage_yields_losses:
+  path: data/exogenous/stage_yields_losses.csv
+  required: true
+  columns:
+    - year
+    - material
+    - region
+    - extraction_yield
+    - beneficiation_yield
+    - refining_yield
+    - sorting_yield
+    - extraction_loss_to_sysenv_share
+    - beneficiation_loss_to_sysenv_share
+    - refining_loss_to_sysenv_share
+    - sorting_reject_to_disposal_share
+    - sorting_reject_to_sysenv_share
+  unit: share
+  constraints:
+    - "0 <= all yields/shares <= 1"
+    - "sorting_reject_to_disposal_share + sorting_reject_to_sysenv_share = 1 per (year, material, region)"
+
+collection_routing_rates:
+  path: data/exogenous/collection_routing_rates.csv
+  required: true
+  columns: [year, material, region, recycling_rate, remanufacturing_rate, disposal_rate]
+  unit: share
+  constraints:
+    - "0 <= recycling_rate, remanufacturing_rate, disposal_rate <= 1"
+    - "recycling_rate + remanufacturing_rate + disposal_rate = 1 per (year, material, region)"
+
+remanufacturing_end_use_eligibility:
+  path: data/exogenous/remanufacturing_end_use_eligibility.csv
+  required: true
+  columns: [year, region, end_use, value]
+  unit: share
+  constraints:
+    - "0 <= value <= 1"
+  notes:
+    - "High-level end-use eligibility factor for remanufacturing."
+    - "Applied as a multiplicative gate on remanufacturing routing; non-eligible share is rerouted to recycling/disposal."
+
+lifetime_distributions:
+  path: data/exogenous/lifetime_distributions.csv
+  required: true
+  columns: [cohort_year, material, region, end_use, dist, param, value]
+  unit: years
+  notes:
+    - "Long format: one row per parameter; pivoted in code."
+
+service_activity:
+  path: data/exogenous/service_activity.csv
+  required: false
+  columns: [year, material, region, value]
+  unit: index
+  notes:
+    - "Optional demand-transformation driver."
+    - "Recommended normalization baseline is first modeled year = 1."
+
+material_intensity:
+  path: data/exogenous/material_intensity.csv
+  required: false
+  columns: [year, material, region, value]
+  unit: index
+  notes:
+    - "Optional demand-transformation driver (material intensity per unit service)."
+    - "Recommended normalization baseline is first modeled year = 1."
+
+stock_in_use:
+  path: data/exogenous/stock_in_use.csv
+  required: false
+  columns: [year, material, region, end_use, value]
+  unit: t
+  notes:
+    - "Calibration-only observations for fit metrics; not used to drive MFA."

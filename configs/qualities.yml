@@ -1,0 +1,15 @@
+# Interface Contract: Quality Dimension
+#
+# Section 1) Scope
+# - Quality axis for stage/flow quality states used by MFA process definitions.
+#
+# Section 2) Required keys
+# - dimension: {name, symbol}
+# - qualities: non-empty list.
+#
+dimension:
+  name: quality
+  symbol: q
+
+qualities:
+  - mixed

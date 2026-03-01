@@ -1,0 +1,111 @@
+# Interface Contract: Scenario Variant
+#
+# Section 1) Scope
+# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
+# - Applies to this file only; values are merged onto the active run baseline.
+#
+# Section 2) Required keys
+# - name: unique variant id used by CLI --variant selection.
+# - description: concise plain-language scenario intent.
+# - implementation: list[str] describing how config changes map to model behavior.
+#
+# Section 3) Optional override blocks
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
+# - Any omitted block inherits active values from run baseline and prior merge layers.
+#
+# Section 4) dimension_overrides item schema
+# - name?, materials?, regions?, sd_parameters?, mfa_parameters?, strategy?, shocks?.
+# - Filters default to all materials/regions when omitted.
+# - Multiple matching items are applied in file order.
+#
+# Section 5) SD temporal values
+# - Applies to temporal-capable SD keys (for example sd_parameters.* and sd_heterogeneity.sd_parameters.*).
+# - Form A scalar (constant for all modeled years):
+#   key: 0.30
+# - Form B year-gated step (switches at start_year):
+#   key:
+#     start_year: 2025
+#     value: 0.35
+#     before: 0.30   # optional; if omitted, baseline is injected at runtime
+# - Form C full timeseries (explicit per-year values):
+#   key: [0.30, 0.30, 0.31, ...]
+# - Form D exogenous ramp reference (CSV-backed; resolves to temporal points at runtime):
+#   key:
+#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
+#     # optional selectors for explicit routing:
+#     # variant: example_variant
+#     # block: mfa_parameters
+#     # key: collection_rate
+#     # material: nickel
+#     # region: EU27
+# - Full timeseries length must equal modeled year count (time.start_year..time.end_year).
+# - Year-gates before report_start_year are shifted/clipped by reporting-phase enforcement.
+#
+name: r_portfolio_combined
+description: Integrated R-strategies portfolio blending medium-to-high ambition across
+  demand efficiency, lifetime-reman loops, and recovery loops.
+implementation:
+- Combine medium demand reduction and medium-high fabrication efficiency.
+- Combine medium-high lifetime extension and remanufacturing routing/yields.
+- Combine medium-high collection, sorting, recycling performance, and near-closed
+  new-scrap loop closure.
+- Introduce a mid-horizon temporary demand pressure window so bottleneck channels
+  activate under constrained capacity-envelope dynamics.
+transition_policy:
+  enabled: true
+  start_year: 2026
+  adoption_target: 0.65
+  adoption_lag_years: 4.5
+  compliance_delay_years: 1.0
+  demand_intensity_reduction_max: 0.08
+  collection_uplift_max: 0.12
+  recycling_yield_uplift_max: 0.1
+  capacity_expansion_gain_uplift: 0.12
+  bottleneck_relief_max: 0.2
+demand_transformation:
+  enabled: true
+  service_activity_source: service_activity
+  material_intensity_source: material_intensity
+  service_activity_multiplier:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  material_intensity_multiplier:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  efficiency_improvement:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  rebound_effect: 0.16
+  transition_adoption_weight: 0.6
+  min_demand_multiplier: 0.6
+  max_demand_multiplier: 1.1
+sd_parameters:
+  capacity_envelope_max:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  capacity_adjustment_lag_years:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  bottleneck_scarcity_gain:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  bottleneck_collection_sensitivity:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  capacity_expansion_gain:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+mfa_parameters:
+  fabrication_yield:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  collection_rate:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  sorting_yield:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+strategy:
+  lifetime_multiplier:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  reman_yield:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  recycling_yield:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  recycling_rate:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  remanufacturing_rate:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  disposal_rate:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv
+  new_scrap_to_secondary_share:
+    exogenous_ramp: data/ramp_profiles/r_strategies/r_portfolio_profiles.csv

@@ -1,0 +1,87 @@
+# Interface Contract: Scenario Variant
+#
+# Section 1) Scope
+# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
+# - Applies to this file only; values are merged onto the active run baseline.
+#
+# Section 2) Required keys
+# - name: unique variant id used by CLI --variant selection.
+# - description: concise plain-language scenario intent.
+# - implementation: list[str] describing how config changes map to model behavior.
+#
+# Section 3) Optional override blocks
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
+# - Any omitted block inherits active values from run baseline and prior merge layers.
+#
+# Section 4) dimension_overrides item schema
+# - name?, materials?, regions?, sd_parameters?, mfa_parameters?, strategy?, shocks?.
+# - Filters default to all materials/regions when omitted.
+# - Multiple matching items are applied in file order.
+#
+# Section 5) SD temporal values
+# - Applies to temporal-capable SD keys (for example sd_parameters.* and sd_heterogeneity.sd_parameters.*).
+# - Form A scalar (constant for all modeled years):
+#   key: 0.30
+# - Form B year-gated step (switches at start_year):
+#   key:
+#     start_year: 2025
+#     value: 0.35
+#     before: 0.30   # optional; if omitted, baseline is injected at runtime
+# - Form C full timeseries (explicit per-year values):
+#   key: [0.30, 0.30, 0.31, ...]
+# - Form D exogenous ramp reference (CSV-backed; resolves to temporal points at runtime):
+#   key:
+#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
+#     # optional selectors for explicit routing:
+#     # variant: example_variant
+#     # block: mfa_parameters
+#     # key: collection_rate
+#     # material: nickel
+#     # region: EU27
+# - Full timeseries length must equal modeled year count (time.start_year..time.end_year).
+# - Year-gates before report_start_year are shifted/clipped by reporting-phase enforcement.
+#
+name: capacity_crunch_recovery
+description: Targeted crunch-recovery stress test for endogenous capacity-scarcity-price dynamics.
+implementation:
+- Stress window (2025-2042) combines higher demand with tighter primary availability.
+- Activates bottleneck amplification and collection throttle channels.
+- Shocks end after window; recovery is endogenous through capacity-envelope dynamics.
+sd_parameters:
+  capacity_expansion_gain: 0.34
+  capacity_adjustment_lag_years: 4.0
+  capacity_pressure_shortage_weight: 0.82
+  bottleneck_scarcity_gain: 0.35
+  bottleneck_collection_sensitivity: 0.18
+  collection_price_response_gain: 0.3
+shocks:
+  demand_surge:
+    start_year: 2025
+    duration_years: 18
+    multiplier: 1.35
+  primary_refined_output:
+    start_year: 2025
+    duration_years: 18
+    multiplier: 0.9
+  primary_refined_net_imports:
+    start_year: 2025
+    duration_years: 18
+    multiplier: 0.72
+dimension_overrides:
+- name: nickel_eu27_deeper_crunch
+  materials:
+  - nickel
+  regions:
+  - EU27
+  shocks:
+    demand_surge:
+      start_year: 2025
+      duration_years: 18
+      multiplier: 1.5
+    primary_refined_net_imports:
+      start_year: 2025
+      duration_years: 18
+      multiplier: 0.6
+  sd_parameters:
+    bottleneck_scarcity_gain: 0.45
+    bottleneck_collection_sensitivity: 0.22

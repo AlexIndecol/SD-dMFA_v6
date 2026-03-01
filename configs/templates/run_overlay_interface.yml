@@ -1,0 +1,25 @@
+# Interface Template: Run Overlay (extends _core)
+#
+# Section 1) Scope
+# - Thin profile inheriting canonical defaults from configs/runs/_core.yml.
+# - Used to select scenario packs and apply small delta overrides.
+#
+# Section 2) Required keys
+# - name
+# - extends
+#
+# Section 3) Typical override blocks
+# - includes.scenarios
+# - sd_parameters
+# - mfa_parameters
+# - strategy
+# - transition_policy
+# - demand_transformation
+# - shocks
+# - variants
+# - sd_heterogeneity
+#
+name: "Example run overlay"
+extends: ./_core.yml
+includes:
+  scenarios: ../scenarios/mvp/*.yml

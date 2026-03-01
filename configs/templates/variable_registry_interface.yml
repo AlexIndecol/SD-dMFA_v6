@@ -1,0 +1,23 @@
+# Interface Template: Exogenous Variable Registry
+#
+# Section 1) Scope
+# - Declares external input files consumed by loaders/validators.
+#
+# Section 2) Entry schema
+# - <variable_id>:
+#     path: <repo-relative csv path>
+#     required: <bool>
+#     columns: [..]
+#     unit: <optional>
+#     constraints: [optional list]
+#     notes: [optional list]
+#
+example_variable:
+  path: data/exogenous/example.csv
+  required: false
+  columns: [year, material, region, value]
+  unit: index
+  constraints:
+    - "value >= 0"
+  notes:
+    - "Template entry."

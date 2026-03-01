@@ -1,0 +1,54 @@
+# Interface Template: Scenario Variant
+#
+# Section 1) Scope
+# - Canonical template for files under configs/scenarios/**.
+# - Scenario files are loaded by includes.scenarios and merged over run baseline.
+#
+# Section 2) Required keys
+# - name: variant id used by CLI --variant.
+# - description: concise scenario intent.
+# - implementation: ordered list of mechanism notes.
+#
+# Section 3) Optional override blocks
+# - sd_parameters
+# - mfa_parameters
+# - strategy
+# - transition_policy
+# - demand_transformation
+# - shocks
+# - dimension_overrides
+#
+# Section 4) dimension_overrides item schema
+# - name?: label for traceability
+# - materials?: list[str] material filter
+# - regions?: list[str] region filter
+# - Any optional override blocks from Section 3.
+# - Multiple matching items apply in file order.
+#
+# Section 5) Temporal value forms
+# - scalar: key: 0.30
+# - year-gate: key: {start_year: 2025, value: 0.35, before: 0.30}
+# - full timeseries: key: [..] (length == modeled years)
+# - exogenous ramp reference (preferred):
+#   key:
+#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
+#     # optional selectors for explicit routing:
+#     # variant: example_variant
+#     # block: mfa_parameters
+#     # key: collection_rate
+#     # material: nickel
+#     # region: EU27
+#
+name: example_variant_name
+description: Example scenario template (documentation only).
+implementation:
+  - Replace with concrete scenario mechanics.
+
+# Optional blocks below are examples only:
+# sd_parameters: {}
+# mfa_parameters: {}
+# strategy: {}
+# transition_policy: {}
+# demand_transformation: {}
+# shocks: {}
+# dimension_overrides: []

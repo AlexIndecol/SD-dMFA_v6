@@ -1,0 +1,31 @@
+# Interface Contract: Run Overlay (extends _core)
+#
+# Section 1) Scope
+# - Thin run profile that extends canonical defaults from configs/runs/_core.yml.
+# - Intended to set scenario pack includes and profile-specific deltas only.
+#
+# Section 2) Required keys
+# - name
+# - extends
+#
+# Section 3) Allowed override blocks
+# - includes.scenarios
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation,
+#   shocks, variants, sd_heterogeneity, scenario_profiles
+#
+name: "Tin–Zinc–Nickel | EU27–China–RoW | Coupled SD–dMFA (R-strategies)"
+extends: ./_core.yml
+
+includes:
+  scenarios: ../scenarios/r_strategies/*.yml
+
+scenario_profiles:
+  enabled: true
+  csv_globs:
+    - ../../data/ramp_profiles/r_strategies/*.csv
+  interpolation: linear
+  apply_precedence: profile_overrides_variant
+  emit_resolved_payload: true
+
+strategy:
+  new_scrap_to_secondary_share: 0.85

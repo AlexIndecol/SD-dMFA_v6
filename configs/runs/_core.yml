@@ -1,0 +1,175 @@
+# Interface Template Reference:
+# - configs/templates/run_core_interface.yml
+
+name: "Tin–Zinc–Nickel | EU27–China–RoW | Coupled SD–dMFA (core)"
+
+includes:
+  time: ../time.yml
+  regions: ../regions.yml
+  materials: ../materials.yml
+  end_uses: ../end_use.yml
+  stages: ../stages.yml
+  qualities: ../qualities.yml
+  trade: ../trade.yml
+  coupling: ../coupling.yml
+  indicators: ../indicators.yml
+  variables: ../../registry/variable_registry.yml
+
+# SD parameter interface contract (applies to sd_parameters and sd_heterogeneity.sd_parameters):
+# 1) scalar
+#    capacity_expansion_gain: 0.26
+# 2) year-gated override
+#    capacity_expansion_gain:
+#      start_year: 2025
+#      value: 0.34
+#      before: 0.26   # optional; injected from baseline when omitted
+# 3) full timeseries (length must match modeled years)
+#    coupling_signal_smoothing: [0.50, 0.50, 0.52, 0.55]
+sd_parameters:
+  price_base: 1.0
+  price_scarcity_sensitivity: 0.55
+  demand_price_elasticity: 0.1
+  coupling_service_stress_gain: 3.5
+  coupling_circular_supply_stress_gain: 0.8
+  coupling_signal_smoothing: 0.5
+  coupling_signal_smoothing_strategic: 0.35
+  service_stress_signal_cap: 0.60
+  coupling_stress_multiplier_cap: 3.0
+  collection_price_response_gain: 0.22
+  collection_multiplier_min: 0.88
+  collection_multiplier_max: 1.10
+  collection_multiplier_lag_years: 4.0
+  capacity_envelope_initial: 1.0
+  capacity_envelope_min: 0.8
+  capacity_envelope_max: 1.45
+  capacity_expansion_gain: 0.26
+  capacity_retirement_gain: 0.04
+  capacity_adjustment_lag_years: 4.5
+  capacity_pressure_shortage_weight: 0.78
+  bottleneck_scarcity_gain: 0.15
+  bottleneck_collection_sensitivity: 0.08
+
+sd_heterogeneity:
+  - name: region_eu27
+    regions: [EU27]
+    sd_parameters:
+      demand_price_elasticity: 0.12
+      coupling_signal_smoothing: 0.55
+  - name: region_china
+    regions: [China]
+    sd_parameters:
+      demand_price_elasticity: 0.08
+      coupling_signal_smoothing: 0.45
+  - name: material_nickel
+    materials: [nickel]
+    sd_parameters:
+      coupling_service_stress_gain: 4.0
+  - name: nickel_eu27_specific
+    materials: [nickel]
+    regions: [EU27]
+    sd_parameters:
+      coupling_service_stress_gain: 4.5
+
+mfa_parameters:
+  fabrication_yield: 0.9106381416270936
+  collection_rate: 0.9008874995045274
+  recycling_yield: 0.8812045184007978
+  reman_yield: 0.7168092328464711
+  mass_balance_tolerance: 1.0e-8
+
+strategy:
+  reman_yield: 0.8352044626291464
+  lifetime_multiplier: 1.1526680751302085
+  refinery_stockpile_release_rate: 0.25
+  new_scrap_to_secondary_share: 0.75
+  strategic_reserve_enabled: false
+  strategic_reserve_target_coverage_years: 0.5
+  strategic_reserve_fill_gain: 0.5
+  strategic_reserve_release_gain: 1.0
+  strategic_reserve_max_fill_rate: 0.15
+  strategic_reserve_max_release_rate: 0.25
+  strategic_reserve_fill_price_threshold: 1.0
+  strategic_reserve_release_price_threshold: 1.1
+  strategic_reserve_fill_service_threshold: 0.05
+  strategic_reserve_release_service_threshold: 0.15
+
+# Transition-policy loop contract:
+# - enabled: activate adoption/compliance dynamic.
+# - start_year: first year policy can activate (compliance delay is additive).
+# - adoption_target: long-run adoption share in [0,1].
+# - adoption_lag_years: adjustment time constant for adoption stock.
+# - compliance_delay_years: initial delay before adoption starts moving.
+# - demand_intensity_reduction_max: max additional demand-intensity reduction from full adoption.
+# - collection_uplift_max: max multiplicative uplift applied to baseline collection_rate.
+# - recycling_yield_uplift_max: max multiplicative uplift applied to recycling_yield.
+# - capacity_expansion_gain_uplift: max multiplicative uplift applied to capacity_expansion_gain.
+# - bottleneck_relief_max: max proportional relief applied to bottleneck gain channels.
+transition_policy:
+  enabled: false
+  start_year: 2025
+  adoption_target: 0.0
+  adoption_lag_years: 4.0
+  compliance_delay_years: 0.0
+  demand_intensity_reduction_max: 0.0
+  collection_uplift_max: 0.0
+  recycling_yield_uplift_max: 0.0
+  capacity_expansion_gain_uplift: 0.0
+  bottleneck_relief_max: 0.0
+
+# Demand-transformation loop contract:
+# - enabled: activate decomposition on top of final_demand.
+# - service_activity_source/material_intensity_source: variable-registry ids for optional drivers.
+# - *_multiplier: scalar/year-gated/timeseries multipliers for each driver.
+# - efficiency_improvement: additional demand reduction fraction in [0,1).
+# - rebound_effect: rebound share in [0,1] that offsets efficiency reduction.
+# - transition_adoption_weight: coupling weight from transition-policy adoption stock in [0,1].
+# - min_demand_multiplier/max_demand_multiplier: clamp bounds for total transformed multiplier.
+# - normalize_exogenous: if true, exogenous driver series are normalized to first modeled year.
+demand_transformation:
+  enabled: false
+  service_activity_source: service_activity
+  material_intensity_source: material_intensity
+  service_activity_multiplier: 1.0
+  material_intensity_multiplier: 1.0
+  efficiency_improvement: 0.0
+  rebound_effect: 0.0
+  transition_adoption_weight: 0.0
+  min_demand_multiplier: 0.25
+  max_demand_multiplier: 2.5
+  normalize_exogenous: true
+
+# Scenario-profile activation contract:
+# - enabled: turn CSV profile loading on/off at runtime.
+# - csv_globs: one or more glob patterns for profile CSV files.
+# - interpolation: currently supports linear interpolation between provided year points.
+# - apply_precedence: must be profile_overrides_variant (profile payload overrides variant YAML).
+# - emit_resolved_payload: write resolved profile overlay payload into run artifacts.
+scenario_profiles:
+  enabled: false
+  csv_globs: []
+  interpolation: linear
+  apply_precedence: profile_overrides_variant
+  emit_resolved_payload: true
+
+shocks:
+  demand_surge: null
+  recycling_disruption: null
+  primary_refined_output: null
+  primary_refined_net_imports: null
+  extraction_yield: null
+  beneficiation_yield: null
+  refining_yield: null
+  sorting_yield: null
+  collection_rate: null
+  recycling_rate: null
+  remanufacturing_rate: null
+  disposal_rate: null
+  strategic_fill_intent: null
+  strategic_release_intent: null
+
+variants:
+  baseline:
+    description: Reference pathway with exogenous demand, primary refined supply inputs, and routing rates as provided in input datasets.
+    implementation:
+      - No additional variant-level overrides.
+      - Uses baseline mfa_parameters/strategy plus exogenous primary_refined_output, primary_refined_net_imports, stage_yields_losses, and collection_routing_rates.

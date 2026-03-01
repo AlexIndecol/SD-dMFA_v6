@@ -1,0 +1,43 @@
+# Interface Template: Canonical Run Core
+#
+# Section 1) Scope
+# - Single source of canonical defaults for model execution.
+# - Overlay run files should extend this file.
+#
+# Section 2) Required top-level keys
+# - name
+# - includes
+# - sd_parameters
+# - mfa_parameters
+# - strategy
+# - transition_policy
+# - demand_transformation
+# - shocks
+# - variants
+#
+# Section 3) Includes contract
+# - Required includes: time, regions, materials, end_uses, stages, qualities,
+#   coupling, indicators, variables.
+# - Optional include: trade, scenarios.
+#
+# Section 4) Merge precedence (low -> high)
+# - run sd_parameters
+# - sd_heterogeneity
+# - variant sd_parameters
+# - dimension_overrides[*].sd_parameters
+# - Equivalent precedence applies for mfa_parameters/strategy/transition_policy/
+#   demand_transformation/shocks.
+#
+# Section 5) Temporal forms
+# - scalar, year-gated, and full-timeseries are accepted for temporal-capable keys.
+#
+name: "Example canonical run core"
+includes: {}
+sd_parameters: {}
+mfa_parameters: {}
+strategy: {}
+transition_policy: {}
+demand_transformation: {}
+shocks: {}
+variants:
+  baseline: {}

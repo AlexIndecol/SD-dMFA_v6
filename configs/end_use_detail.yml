@@ -1,0 +1,12 @@
+# Interface Contract: Detailed-to-Modeled End-Use Mapping
+#
+# Section 1) Scope
+# - Optional bridge from detailed end-use labels to modeled end_use categories.
+#
+# Section 2) Required keys
+# - mapping
+# - constraints
+#
+mapping: {}
+constraints:
+  - "If a detailed mapping is introduced, shares must sum to 1 within each (year, material, region)."

@@ -1,0 +1,81 @@
+# Interface Contract: MFA Process Graph
+#
+# Section 1) Scope
+# - Defines stage taxonomy, process nodes, native stocks, and inter-process flows.
+#
+# Section 2) Required keys
+# - dimension, stages, processes, stocks, flows, constraints.
+#
+# Section 3) Structural rules
+# - Flows and stocks must reference declared process names.
+# - Required process roles and required native stocks must be present.
+#
+dimension:
+  name: stage
+  symbol: p
+
+stages:
+  - primary_extraction
+  - beneficiation_concentration
+  - refining
+  - fabrication_and_manufacturing
+  - use
+  - collection
+  - sorting_preprocessing
+  - remanufacturing
+  - recycling_refining_secondary
+  - residue_treatment_disposal
+  - sysenv
+
+processes:
+  - {id: 0, name: sysenv,                       role: source}
+  - {id: 1, name: primary_extraction,            role: primary_extraction}
+  - {id: 2, name: beneficiation_concentration,   role: beneficiation_concentration}
+  - {id: 3, name: refining,                      role: refining}
+  - {id: 4, name: fabrication_and_manufacturing, role: fabrication}
+  - {id: 5, name: use,                           role: use_stock}
+  - {id: 6, name: collection,                    role: collection}
+  - {id: 7, name: sorting_preprocessing,         role: sorting_preprocessing}
+  - {id: 8, name: remanufacturing,               role: remanufacture}
+  - {id: 9, name: recycling_refining_secondary,  role: recycling}
+  - {id: 10, name: residue_treatment_disposal,   role: disposal}
+
+stocks:
+  - {name: stock_in_use, process: use, dim_letters: [t, r, e], role: use_stock_native}
+  - {name: refinery_stockpile_native, process: refining, dim_letters: [t, r, e], role: refinery_stockpile_native}
+  - {name: strategic_inventory_native, process: refining, dim_letters: [t, r, e], role: strategic_inventory_native}
+
+flows:
+  - {from: sysenv,                      to: primary_extraction,            dim_letters: [t, r, e]}
+  - {from: primary_extraction,          to: beneficiation_concentration,   dim_letters: [t, r, e]}
+  - {from: primary_extraction,          to: sysenv,                        dim_letters: [t, r, e]}
+  - {from: primary_extraction,          to: residue_treatment_disposal,    dim_letters: [t, r, e]}
+  - {from: beneficiation_concentration, to: refining,                      dim_letters: [t, r, e]}
+  - {from: beneficiation_concentration, to: sysenv,                        dim_letters: [t, r, e]}
+  - {from: beneficiation_concentration, to: residue_treatment_disposal,    dim_letters: [t, r, e]}
+  - {from: refining,                    to: fabrication_and_manufacturing, dim_letters: [t, r, e]}
+  - {from: refining,                    to: sysenv,                        dim_letters: [t, r, e]}
+  - {from: refining,                    to: residue_treatment_disposal,    dim_letters: [t, r, e]}
+  - {from: fabrication_and_manufacturing, to: use,                         dim_letters: [t, r, e]}
+  - {from: fabrication_and_manufacturing, to: sysenv,                      dim_letters: [t, r, e]}
+  - {from: fabrication_and_manufacturing, to: refining,                    dim_letters: [t, r, e]}
+  - {from: use,                         to: collection,                     dim_letters: [t, r, e]}
+  - {from: use,                         to: sysenv,                         dim_letters: [t, r, e]}
+  - {from: collection,                  to: sorting_preprocessing,          dim_letters: [t, r, e]}
+  - {from: collection,                  to: remanufacturing,                dim_letters: [t, r, e]}
+  - {from: collection,                  to: residue_treatment_disposal,     dim_letters: [t, r, e]}
+  - {from: sorting_preprocessing,       to: recycling_refining_secondary,   dim_letters: [t, r, e]}
+  - {from: sorting_preprocessing,       to: residue_treatment_disposal,     dim_letters: [t, r, e]}
+  - {from: sorting_preprocessing,       to: sysenv,                         dim_letters: [t, r, e]}
+  - {from: recycling_refining_secondary, to: refining,                       dim_letters: [t, r, e]}
+  - {from: recycling_refining_secondary, to: sysenv,                         dim_letters: [t, r, e]}
+  - {from: remanufacturing,             to: use,                            dim_letters: [t, r, e]}
+  - {from: remanufacturing,             to: sysenv,                         dim_letters: [t, r, e]}
+  - {from: residue_treatment_disposal,  to: sysenv,                         dim_letters: [t, r, e]}
+
+constraints:
+  - "Each required role must appear exactly once in processes."
+  - "Each required native stock (stock_in_use, refinery_stockpile_native, strategic_inventory_native) must be declared once."
+  - "All flows must reference process names defined in processes."
+  - "Forward chain: sysenv (environment) -> primary_extraction -> beneficiation_concentration -> refining -> fabrication_and_manufacturing -> use."
+  - "Reverse chain: use -> collection -> (sorting_preprocessing -> recycling_refining_secondary -> refining) OR remanufacturing OR residue_treatment_disposal."

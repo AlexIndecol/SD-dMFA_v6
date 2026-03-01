@@ -1,0 +1,13 @@
+variant,block,key,year,value,material,region,before
+import_squeeze_circular_ramp,demand_transformation,efficiency_improvement,2020,0.00,,,0.00
+import_squeeze_circular_ramp,demand_transformation,efficiency_improvement,2028,0.04,,,
+import_squeeze_circular_ramp,demand_transformation,efficiency_improvement,2035,0.11,,,
+import_squeeze_circular_ramp,demand_transformation,efficiency_improvement,2050,0.12,,,
+import_squeeze_circular_ramp,demand_transformation,efficiency_improvement,2100,0.12,,,
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2020,1.00,,,1.00
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2028,0.92,,,
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2040,0.88,,,
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2100,0.86,,,
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2028,0.88,nickel,EU27,
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2040,0.84,nickel,EU27,
+import_squeeze_circular_ramp,demand_transformation,material_intensity_multiplier,2100,0.82,nickel,EU27,

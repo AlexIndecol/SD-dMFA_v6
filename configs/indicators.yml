@@ -1,0 +1,158 @@
+# Interface Contract: Indicator Registry
+#
+# Section 1) Scope
+# - Declares exported indicators and logical subsets used in reporting.
+#
+# Section 2) Required groups
+# - mfa_state_and_flow_metrics
+# - resilience_service_indicators
+# - service_risk
+#
+# Section 3) Group schema
+# - indicators: list[str]
+# - logical_subsets (optional): mapping subset_name -> list[str]
+#
+mfa_state_and_flow_metrics:
+  indicators:
+    - Stock_in_use
+    - Inflow_to_use_total
+    - Inflow_to_use_new
+    - Inflow_to_use_reman
+    - Outflow_from_use
+    - Primary_supply
+    - Primary_refined_net_imports
+    - Primary_available_to_refining
+    - Secondary_supply
+    - EoL_generated
+    - EoL_collected
+    - Collection_rate_effective
+    - EoL_recycled
+    - EoL_remanufactured
+    - EoL_disposal
+    - EoL_uncollected
+    - Fabrication_losses
+    - New_scrap_generated
+    - New_scrap_to_secondary
+    - New_scrap_to_residue
+    - Old_scrap_generated
+    - Old_scrap_collected
+    - Old_scrap_uncollected
+    - Recycling_process_losses
+    - Recycling_surplus_unused
+    - Refinery_stockpile_inflow
+    - Refinery_stockpile_outflow
+    - Refinery_stockpile_stock
+    - Strategic_inventory_inflow
+    - Strategic_inventory_outflow
+    - Strategic_inventory_stock
+    - Strategic_stock_coverage_years
+    - Strategic_fill_intent
+    - Strategic_release_intent
+    - Remanufacture_process_losses
+    - Remanufacture_surplus_unused
+    - Extraction_losses
+    - Beneficiation_losses
+    - Refining_losses
+    - Sorting_rejects_to_disposal
+    - Sorting_rejects_to_sysenv
+    - Mass_balance_residual_max_abs
+    - EoL_RR
+    - RIR
+  logical_subsets:
+    stocks_and_use_phase:
+      - Stock_in_use
+      - Inflow_to_use_total
+      - Inflow_to_use_new
+      - Inflow_to_use_reman
+      - Outflow_from_use
+    primary_secondary_supply:
+      - Primary_supply
+      - Primary_refined_net_imports
+      - Primary_available_to_refining
+      - Secondary_supply
+      - Refinery_stockpile_inflow
+      - Refinery_stockpile_outflow
+      - Refinery_stockpile_stock
+      - Strategic_inventory_inflow
+      - Strategic_inventory_outflow
+      - Strategic_inventory_stock
+      - Strategic_stock_coverage_years
+      - Extraction_losses
+      - Beneficiation_losses
+      - Refining_losses
+    eol_and_routing:
+      - EoL_generated
+      - EoL_collected
+      - Collection_rate_effective
+      - EoL_recycled
+      - EoL_remanufactured
+      - EoL_disposal
+      - EoL_uncollected
+      - Old_scrap_generated
+      - Old_scrap_collected
+      - Old_scrap_uncollected
+      - Sorting_rejects_to_disposal
+      - Sorting_rejects_to_sysenv
+    losses_surplus_and_stockpile:
+      - Fabrication_losses
+      - New_scrap_generated
+      - New_scrap_to_secondary
+      - New_scrap_to_residue
+      - Recycling_process_losses
+      - Recycling_surplus_unused
+      - Strategic_fill_intent
+      - Strategic_release_intent
+      - Remanufacture_process_losses
+      - Remanufacture_surplus_unused
+    circularity_ratios:
+      - EoL_RR
+      - RIR
+    diagnostics:
+      - Mass_balance_residual_max_abs
+
+resilience_service_indicators:
+  indicators:
+    - Service_demand
+    - Delivered_service
+    - Unmet_service
+    - Service_level
+    - Service_deficit
+    - Coupling_service_stress
+    - Coupling_circular_supply_stress
+    - Coupling_strategic_stock_coverage_signal
+    - Coupling_stress_multiplier
+    - Coupling_collection_multiplier
+    - SD_scarcity_multiplier_effective
+    - SD_capacity_envelope
+    - SD_flow_utilization
+    - SD_bottleneck_pressure
+    - SD_collection_bottleneck_throttle
+    - Resilience_triangle_area
+    - Years_below_service_threshold
+    - Max_consecutive_years_below_threshold
+  logical_subsets:
+    service_outcomes:
+      - Service_demand
+      - Delivered_service
+      - Unmet_service
+      - Service_level
+      - Service_deficit
+    coupling_signals:
+      - Coupling_service_stress
+      - Coupling_circular_supply_stress
+      - Coupling_strategic_stock_coverage_signal
+      - Coupling_stress_multiplier
+      - Coupling_collection_multiplier
+      - SD_scarcity_multiplier_effective
+      - SD_capacity_envelope
+      - SD_flow_utilization
+      - SD_bottleneck_pressure
+      - SD_collection_bottleneck_throttle
+    resilience_scalars:
+      - Resilience_triangle_area
+      - Years_below_service_threshold
+      - Max_consecutive_years_below_threshold
+
+service_risk:
+  # Threshold used for threshold-based resilience metrics.
+  threshold_service_level: 0.95

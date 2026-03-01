@@ -1,0 +1,69 @@
+# Interface Contract: Scenario Variant
+#
+# Section 1) Scope
+# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
+# - Applies to this file only; values are merged onto the active run baseline.
+#
+# Section 2) Required keys
+# - name: unique variant id used by CLI --variant selection.
+# - description: concise plain-language scenario intent.
+# - implementation: list[str] describing how config changes map to model behavior.
+#
+# Section 3) Optional override blocks
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
+# - Any omitted block inherits active values from run baseline and prior merge layers.
+#
+# Section 4) demand_transformation semantics
+# - Decomposes demand using optional service-activity and material-intensity exogenous drivers.
+# - Applies additional scenario multipliers and efficiency/rebound dynamics.
+#
+name: demand_transformation_shift
+description: Demand-transformation stress profile with stronger service growth offset by intensity decline and efficiency gains.
+implementation:
+  - Activates exogenous demand decomposition into service activity and material intensity channels.
+  - Adds reporting-phase efficiency improvement with bounded rebound.
+  - Keeps transition policy disabled to isolate demand-transformation loop behavior.
+
+demand_transformation:
+  enabled: true
+  service_activity_source: service_activity
+  material_intensity_source: material_intensity
+  service_activity_multiplier:
+    start_year: 2025
+    value: 1.10
+  material_intensity_multiplier:
+    start_year: 2025
+    value: 0.88
+  efficiency_improvement:
+    start_year: 2025
+    value: 0.12
+  rebound_effect: 0.20
+  transition_adoption_weight: 0.0
+  min_demand_multiplier: 0.65
+  max_demand_multiplier: 1.40
+
+shocks:
+  demand_surge:
+    start_year: 2025
+    duration_years: 10
+    multiplier: 1.10
+
+dimension_overrides:
+  - name: china_service_acceleration
+    regions: [China]
+    demand_transformation:
+      service_activity_multiplier:
+        start_year: 2025
+        value: 1.16
+      efficiency_improvement:
+        start_year: 2025
+        value: 0.10
+  - name: eu27_intensity_push
+    regions: [EU27]
+    demand_transformation:
+      material_intensity_multiplier:
+        start_year: 2025
+        value: 0.82
+      efficiency_improvement:
+        start_year: 2025
+        value: 0.14

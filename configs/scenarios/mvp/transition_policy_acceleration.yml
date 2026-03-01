@@ -1,0 +1,74 @@
+# Interface Contract: Scenario Variant
+#
+# Section 1) Scope
+# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
+# - Applies to this file only; values are merged onto the active run baseline.
+#
+# Section 2) Required keys
+# - name: unique variant id used by CLI --variant selection.
+# - description: concise plain-language scenario intent.
+# - implementation: list[str] describing how config changes map to model behavior.
+#
+# Section 3) Optional override blocks
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
+# - Any omitted block inherits active values from run baseline and prior merge layers.
+#
+# Section 4) transition_policy semantics
+# - Builds an adoption stock with compliance delay and lag.
+# - Adoption can uplift collection/recycling and capacity response while reducing bottleneck gains.
+#
+# Section 5) demand_transformation semantics
+# - Uses optional exogenous drivers (service_activity/material_intensity) with scalar/year-gated/timeseries multipliers.
+# - Applies efficiency improvements and rebound, then clamps total demand multiplier.
+#
+name: transition_policy_acceleration
+description: Transition-policy acceleration with delayed adoption and compliance that strengthens recovery channels.
+implementation:
+  - Transition adoption ramps from 2026 with compliance delay and multi-year lag.
+  - Adoption increases collection and recycling performance and speeds capacity-response buildup.
+  - Bottleneck amplification channels are progressively relieved as adoption matures.
+transition_policy:
+  enabled: true
+  start_year: 2026
+  adoption_target: 0.85
+  adoption_lag_years: 5.0
+  compliance_delay_years: 1.0
+  demand_intensity_reduction_max: 0.18
+  collection_uplift_max: 0.22
+  recycling_yield_uplift_max: 0.12
+  capacity_expansion_gain_uplift: 0.20
+  bottleneck_relief_max: 0.35
+
+demand_transformation:
+  enabled: true
+  service_activity_source: service_activity
+  material_intensity_source: material_intensity
+  service_activity_multiplier:
+    start_year: 2026
+    value: 1.04
+  material_intensity_multiplier:
+    start_year: 2026
+    value: 0.94
+  efficiency_improvement:
+    start_year: 2026
+    value: 0.08
+  rebound_effect: 0.15
+  transition_adoption_weight: 0.70
+  min_demand_multiplier: 0.70
+  max_demand_multiplier: 1.35
+
+dimension_overrides:
+  - name: nickel_eu27_policy_front_runner
+    materials: [nickel]
+    regions: [EU27]
+    transition_policy:
+      adoption_target: 0.92
+      collection_uplift_max: 0.28
+      recycling_yield_uplift_max: 0.16
+      capacity_expansion_gain_uplift: 0.24
+      bottleneck_relief_max: 0.42
+    demand_transformation:
+      efficiency_improvement:
+        start_year: 2026
+        value: 0.10
+      transition_adoption_weight: 0.80

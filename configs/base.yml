@@ -1,0 +1,11 @@
+# Interface Contract: Compatibility Shim
+#
+# Section 1) Scope
+# - Backward-compatibility entrypoint that delegates to configs/runs/mvp.yml.
+#
+# Section 2) Required keys
+# - name
+# - extends
+#
+name: "Tin-Zinc-Nickel | EU27-China-RoW | Coupled SD-dMFA (base shim)"
+extends: runs/mvp.yml

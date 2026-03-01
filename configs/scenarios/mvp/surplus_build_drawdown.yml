@@ -1,0 +1,107 @@
+# Interface Contract: Scenario Variant
+#
+# Section 1) Scope
+# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
+# - Applies to this file only; values are merged onto the active run baseline.
+#
+# Section 2) Required keys
+# - name: unique variant id used by CLI --variant selection.
+# - description: concise plain-language scenario intent.
+# - implementation: list[str] describing how config changes map to model behavior.
+#
+# Section 3) Optional override blocks
+# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
+# - Any omitted block inherits active values from run baseline and prior merge layers.
+#
+# Section 4) dimension_overrides item schema
+# - name?, materials?, regions?, sd_parameters?, mfa_parameters?, strategy?, shocks?.
+# - Filters default to all materials/regions when omitted.
+# - Multiple matching items are applied in file order.
+#
+# Section 5) SD temporal values
+# - Applies to temporal-capable SD keys (for example sd_parameters.* and sd_heterogeneity.sd_parameters.*).
+# - Form A scalar (constant for all modeled years):
+#   key: 0.30
+# - Form B year-gated step (switches at start_year):
+#   key:
+#     start_year: 2025
+#     value: 0.35
+#     before: 0.30   # optional; if omitted, baseline is injected at runtime
+# - Form C full timeseries (explicit per-year values):
+#   key: [0.30, 0.30, 0.31, ...]
+# - Form D exogenous ramp reference (CSV-backed; resolves to temporal points at runtime):
+#   key:
+#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
+#     # optional selectors for explicit routing:
+#     # variant: example_variant
+#     # block: mfa_parameters
+#     # key: collection_rate
+#     # material: nickel
+#     # region: EU27
+# - Full timeseries length must equal modeled year count (time.start_year..time.end_year).
+# - Year-gates before report_start_year are shifted/clipped by reporting-phase enforcement.
+#
+name: surplus_build_drawdown
+description: Buffer activation stress-test with circular oversupply in an early build
+  phase and natural drawdown after shocks expire.
+implementation:
+- 'Build phase (2025-2049): reduced demand plus stronger collection and routing to
+  recycling/remanufacturing.'
+- 'Drawdown phase (2050+): temporary shocks end, demand returns to baseline, and stored
+  circular material is released according to the buffer release rate.'
+strategy:
+  recycling_yield:
+    start_year: 2025
+    value: 0.95
+  reman_yield:
+    start_year: 2025
+    value: 0.95
+  refinery_stockpile_release_rate:
+    start_year: 2025
+    value: 0.12
+sd_parameters:
+  collection_multiplier_min:
+    start_year: 2025
+    value: 1.0
+  collection_multiplier_max:
+    start_year: 2025
+    value: 2.0
+  collection_multiplier_lag_years:
+    start_year: 2025
+    value: 1.5
+shocks:
+  demand_surge:
+    start_year: 2025
+    duration_years: 25
+    multiplier: 0.75
+  collection_rate:
+    start_year: 2025
+    duration_years: 25
+    multiplier: 1.6
+  recycling_rate:
+    start_year: 2025
+    duration_years: 25
+    multiplier: 1.5
+  remanufacturing_rate:
+    start_year: 2025
+    duration_years: 25
+    multiplier: 1.35
+dimension_overrides:
+- name: nickel_eu27_surplus_priority
+  materials:
+  - nickel
+  regions:
+  - EU27
+  strategy:
+    refinery_stockpile_release_rate:
+      start_year: 2025
+      value: 0.1
+  shocks:
+    collection_rate:
+      start_year: 2025
+      duration_years: 25
+      multiplier: 1.7
+    recycling_rate:
+      start_year: 2025
+      duration_years: 25
+      multiplier: 1.6

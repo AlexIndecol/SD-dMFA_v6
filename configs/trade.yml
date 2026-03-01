@@ -1,0 +1,33 @@
+# Interface Contract: Trade Dimensions and Aliases
+#
+# Section 1) Scope
+# - Optional trade-axis definitions for commodity/origin/destination dimensions.
+#
+# Section 2) Required keys
+# - commodity_dimension, origin_region_dimension, destination_region_dimension
+# - trade_aliases, commodities, origin_regions, destination_regions
+#
+# For instance concentrate, refined metal, scrap, etc..
+commodity_dimension:
+  name: commodity
+  symbol: c
+
+origin_region_dimension:
+  name: origin_region
+  symbol: o
+  alias_of: r
+
+destination_region_dimension:
+  name: destination_region
+  symbol: d
+  alias_of: r
+
+# Explicit alias mapping for OD regions to the core region dimension.
+trade_aliases:
+  origin_region: r
+  destination_region: r
+
+# Optional members to be populated when OD trade-flow modules are added.
+commodities: []
+origin_regions: []
+destination_regions: []

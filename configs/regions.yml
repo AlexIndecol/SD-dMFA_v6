@@ -1,0 +1,18 @@
+# Interface Contract: Region Dimension
+#
+# Section 1) Scope
+# - Canonical region list used across model dimensions, exogenous files,
+#   and scenario filters.
+#
+# Section 2) Required keys
+# - dimension: {name, symbol}
+# - regions: non-empty ordered list of canonical region names.
+#
+dimension:
+  name: region
+  symbol: r
+
+regions:
+  - EU27
+  - China
+  - RoW

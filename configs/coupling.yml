@@ -1,0 +1,32 @@
+# Interface Contract: SD-dMFA Coupling Controls
+#
+# Section 1) Scope
+# - Defines loose-iterative coupling mechanics and SD<->MFA signal wiring.
+#
+# Section 2) Required keys
+# - mode, max_iter, convergence_tol, feedback_signal_mode,
+#   feedback_on_report_years_only, signals.
+#
+# Section 3) Allowed values and constraints
+# - feedback_signal_mode: time_series | scalar_mean.
+# - signals.sd_to_mfa and signals.mfa_to_sd entries must use supported
+#   coupling interface names.
+#
+mode: loose_iterative
+max_iter: 12
+convergence_tol: 0.02
+feedback_signal_mode: time_series
+feedback_on_report_years_only: true
+signals:
+  sd_to_mfa:
+    - desired_demand_t            # exogenous desired demand (year × material × region)
+    - end_use_shares_te           # exogenous shares (year × material × region × end_use)
+    - strategic_fill_intent_t     # SD strategic reserve fill control intent (yearly)
+    - strategic_release_intent_t  # SD strategic reserve release control intent (yearly)
+  mfa_to_sd:
+    - service_stress_t            # unmet_service / service_demand (yearly)
+    - circular_supply_stress_t    # 1 - secondary_supply / (primary_supply + secondary_supply) (yearly)
+    - strategic_stock_coverage_years_t  # strategic_inventory_stock / service_demand (yearly)
+notes:
+  - "Loose iterative coupling only (no year-by-year co-simulation)."
+  - "Raised max_iter for strategic reserve scenarios with larger coverage transients."

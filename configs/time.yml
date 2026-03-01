@@ -1,0 +1,20 @@
+# Interface Contract: Time Dimension and Windows
+#
+# Section 1) Scope
+# - Defines modeled horizon and calibration/reporting split years.
+#
+# Section 2) Required keys
+# - dimension: {name, symbol}
+# - start_year, calibration_end_year, report_start_year, end_year
+#
+# Section 3) Ordering constraint
+# - start_year <= calibration_end_year < report_start_year <= end_year
+#
+dimension:
+  name: time
+  symbol: t
+
+start_year: 1870
+calibration_end_year: 2019
+report_start_year: 2020
+end_year: 2100

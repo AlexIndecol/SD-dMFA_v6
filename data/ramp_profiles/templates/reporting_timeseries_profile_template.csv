@@ -1,0 +1,7 @@
+variant,block,key,year,value,material,region,before
+example_variant,sd_parameters,capacity_expansion_gain,2020,0.26,,,0.20
+example_variant,sd_parameters,capacity_expansion_gain,2030,0.32,,,
+example_variant,demand_transformation,efficiency_improvement,2020,0.02,,,
+example_variant,demand_transformation,efficiency_improvement,2040,0.10,,,
+example_variant,demand_transformation,material_intensity_multiplier,2020,0.98,nickel,EU27,
+example_variant,demand_transformation,material_intensity_multiplier,2050,0.85,nickel,EU27,
