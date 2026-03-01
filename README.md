@@ -29,7 +29,9 @@ See `docs/governance/DECISION_LOG.md` for decisions, `docs/workflows/SCENARIOS.m
 ## Quickstart
 
 ```bash
-set -euo pipefail
+# For interactive zsh terminals (including VS Code), avoid `-u` to prevent
+# `__vsc_preexec: RPROMPT: parameter not set`.
+set -eo pipefail
 
 # 1) Environment
 python -m venv .venv
