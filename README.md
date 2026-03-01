@@ -46,10 +46,10 @@ python scripts/validation/lint_run_configs.py
 python scripts/validation/validate_exogenous_inputs.py --config "$CONFIG"
 
 # 4) Inspect available variants in selected config
-python - <<'PY'
-import os
+python - "$CONFIG" <<'PY'
+import sys
 from crm_model.common.io import load_run_config
-cfg = load_run_config(os.environ["CONFIG"])
+cfg = load_run_config(sys.argv[1])
 for name in cfg.variants:
     print(name)
 PY
@@ -81,10 +81,10 @@ python scripts/run_one.py --config "$CONFIG" --variant baseline --phase both --s
 
 ```bash
 # Manual variant loop (explicit and shell-friendly)
-for VARIANT in $(python - <<'PY'
-import os
+for VARIANT in $(python - "$CONFIG" <<'PY'
+import sys
 from crm_model.common.io import load_run_config
-print(" ".join(load_run_config(os.environ["CONFIG"]).variants.keys()))
+print(" ".join(load_run_config(sys.argv[1]).variants.keys()))
 PY
 ); do
   python scripts/run_one.py --config "$CONFIG" --variant "$VARIANT" --phase reporting --save-csv
