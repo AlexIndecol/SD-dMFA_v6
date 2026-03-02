@@ -15,6 +15,7 @@ Starter repository for building a **coupled dynamic Material Flow Analysis (dMFA
 - End-uses: 7 sectors (see `configs/end_use.yml`)
 - Canonical dimension symbols: `t` (time), `r` (region), `m` (material), `e` (end_use), `ed` (end_use_detailed), `p` (stage), `q` (quality); optional OD-trade placeholders: `c` (commodity), `o` (origin region), `d` (destination region)
 - Exogenous inputs (one file per variable): `data/exogenous/*.csv` with schema defined in `registry/variable_registry.yml`
+- Optional OD trade inputs: `data/exogenous/trade_od/*.csv` (BACI-derived observed/weights/constraints)
 - Time horizon: **1870–2100**, with **calibration 1870–2019** and **reporting 2020–2100** (see `configs/time.yml`)
 - Always **loose iterative coupling** (see `configs/coupling.yml`)
 - dMFA stages/links/stocks are defined in `configs/stages.yml` (process names can be renamed via roles)
@@ -172,6 +173,7 @@ Schemas are documented in `data/README.md` and enforced by `registry/variable_re
 - `configs/scenarios/mvp/*.yml` – scenario-file sets loaded via `includes.scenarios`
 - `configs/runs/mvp.yml` – thin overlay run config (`extends: ./_core.yml`)
 - `configs/regions.yml`, `configs/materials.yml`, `configs/end_use.yml`, `configs/stages.yml`, `configs/qualities.yml` – split-layout single sources
+- `configs/trade_od.yml` – optional OD-trade allocator controls (default disabled)
 - `registry/` – exogenous variable registry (file paths + schema)
 - `data/exogenous/` – exogenous inputs (one variable per file)
 - `data/raw/`, `data/processed/`, `data/external/` – data-lake scaffold for future ingestion/ETL separation

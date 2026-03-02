@@ -123,3 +123,48 @@ stock_in_use:
   unit: t
   notes:
     - "Calibration-only observations for fit metrics; not used to drive MFA."
+
+trade_od_observed:
+  path: data/exogenous/trade_od/baci_od_flow_observed.csv
+  required: false
+  columns: [year, material, commodity, origin_region, destination_region, flow_kt]
+  unit: t_per_year
+  notes:
+    - "Observed OD matrix from BACI aggregation."
+    - "Used as reference for OD allocator validation/calibration windows."
+
+trade_od_weights:
+  path: data/exogenous/trade_od/baci_od_weights_rolling3.csv
+  required: false
+  columns: [year, material, commodity, origin_region, destination_region, weight_0_1]
+  unit: share
+  constraints:
+    - "sum_d weight_0_1 = 1 per (year, material, commodity, origin_region)"
+
+trade_od_constraints:
+  path: data/exogenous/trade_od/baci_od_constraints_inputs.csv
+  required: false
+  columns:
+    - year
+    - material
+    - commodity
+    - region
+    - supply_avail_kt
+    - import_need_kt
+    - export_cap_raw_kt
+    - exportable_kt
+  unit: t_per_year
+  notes:
+    - "OD constraint inputs used by the constrained allocator."
+    - "Runtime can combine empirical caps with SD capacity envelopes."
+
+supplier_governance_risk:
+  path: data/exogenous/supplier_governance_risk.csv
+  required: false
+  columns: [year, origin_region, value]
+  unit: index_0_1
+  constraints:
+    - "0 <= value <= 1"
+  notes:
+    - "Optional supplier governance-risk proxy for WGI-style concentration indices."
+    - "origin_region values should align with OD supplier origins (EU27, China, RoW)."

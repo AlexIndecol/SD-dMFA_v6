@@ -19,6 +19,7 @@ Single sources of truth:
 - Dimensions: `configs/regions.yml`, `configs/materials.yml`, `configs/end_use.yml`
 - Time windows: `configs/time.yml`
 - Coupling wiring: `configs/coupling.yml`
+- OD-trade wiring (optional): `configs/trade_od.yml`
 - Indicator set + parameters: `configs/indicators.yml`
 - Assumptions (CONFIRMED vs TEMP): `configs/assumptions.yml`
 - Exogenous variable registry (paths + schemas): `registry/variable_registry.yml`
@@ -48,6 +49,10 @@ Exogenous inputs (one variable per file):
   - `data/exogenous/remanufacturing_end_use_eligibility.csv` (`value` in [0,1] by `year,region,end_use`)
 - Lifetime distributions: `data/exogenous/lifetime_distributions.csv`
 - Observed stock-in-use (optional; calibration only): `data/exogenous/stock_in_use.csv`
+- OD trade observed matrix (optional): `data/exogenous/trade_od/baci_od_flow_observed.csv`
+- OD trade weights (optional): `data/exogenous/trade_od/baci_od_weights_rolling3.csv`
+- OD trade constraint inputs (optional): `data/exogenous/trade_od/baci_od_constraints_inputs.csv`
+- Supplier governance-risk proxy (optional): `data/exogenous/supplier_governance_risk.csv`
 
 ## Coupling logic
 
@@ -86,6 +91,19 @@ Per **material × region**:
    Steps 1–6 repeat until convergence or `max_iter`.
 
 The coupling is **iterative within a run**, not a fully co-simulated year-by-year integration.
+
+Optional OD trade layer:
+
+- When `trade_od.enabled=true`, the runtime computes constrained OD trade flows for the configured
+  historical window using:
+  - exogenous OD preference weights,
+  - empirical export caps,
+  - SD capacity-envelope-derived caps,
+  - a simple robust allocator (proposal -> destination absorption -> reallocation).
+- Runtime also derives supplier diversification diagnostics from OD flows
+  (HHI, diversification, effective supplier count, governance-risk-weighted supplier risk).
+- Outside the OD historical window, the model falls back to the legacy regional balance
+  (`primary_refined_output + primary_refined_net_imports`).
 
 ## Operational run order
 

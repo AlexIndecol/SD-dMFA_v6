@@ -34,6 +34,7 @@ def test_repo_layout_scaffold_files_exist():
         root / "configs" / "stages.yml",
         root / "configs" / "qualities.yml",
         root / "configs" / "trade.yml",
+        root / "configs" / "trade_od.yml",
         root / "configs" / "runs" / "_core.yml",
         root / "configs" / "runs" / "mvp.yml",
         root / "configs" / "runs" / "r-strategies.yml",
@@ -50,6 +51,7 @@ def test_repo_layout_scaffold_files_exist():
         root / "configs" / "templates" / "sd_parameters_temporal_interface.yml",
         root / "data" / "exogenous" / "templates" / "service_activity_template.csv",
         root / "data" / "exogenous" / "templates" / "material_intensity_template.csv",
+        root / "data" / "exogenous" / "supplier_governance_risk.csv",
         root / "data" / "ramp_profiles" / "templates" / "reporting_timeseries_profile_template.csv",
         root / "data" / "ramp_profiles" / "mvp" / "import_squeeze_circular_ramp.csv",
         root / "data" / "ramp_profiles" / "mvp" / "circularity_push.csv",
@@ -69,6 +71,7 @@ def test_repo_layout_scaffold_files_exist():
         root / "configs" / "scenarios" / "r_strategies" / "r_portfolio_combined.yml",
         root / "scripts" / "run_one.py",
         root / "scripts" / "run_batch.py",
+        root / "scripts" / "calibration" / "calibrate_trade_od.py",
         root / "scripts" / "analysis" / "audit_scenario_realism.py",
         root / "scripts" / "scenarios" / "build_reporting_timeseries_profiles.py",
         root / "scripts" / "validation" / "lint_run_configs.py",
@@ -149,6 +152,9 @@ def test_dimensions_symbols_and_stage_stock_config_are_loaded():
     assert cfg.dimensions.commodities == []
     assert cfg.dimensions.origin_regions == []
     assert cfg.dimensions.destination_regions == []
+    assert cfg.trade_od.enabled is False
+    assert cfg.trade_od.commodities == ["concentrates", "refined_metal", "scrap"]
+    assert float(cfg.trade_od.capacity_cap_sd_multiplier) == 1.0
 
     assert cfg.mfa_graph is not None
     stock_names = {s.name for s in cfg.mfa_graph.stocks}

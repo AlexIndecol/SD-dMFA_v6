@@ -24,9 +24,10 @@ Each run exports the exact assumptions used to `outputs/.../assumptions_used.yml
 - **SD heterogeneity by slice:** key SD behavioral parameters (e.g., `demand_price_elasticity`, `coupling_signal_smoothing`, `coupling_service_stress_gain`, `coupling_circular_supply_stress_gain`) can be specified by material-region rules (`sd_heterogeneity`) instead of one-size-fits-all values.
 - **Two-signal coupling feedback:** SD stress input is derived from separate service-stress and circular-supply-stress signals (with configurable gains), not a single aggregate unmet-fraction term.
 - **Remanufacturing scope:** remanufacturing is constrained by high-level end-use eligibility (`remanufacturing_end_use_eligibility.csv`) rather than material identity.
+- **Supplier governance-risk proxy (optional):** `supplier_governance_risk.csv` provides an origin-level risk factor (`EU27`, `China`, `RoW`) for WGI-style concentration weighting; current template uses supplier-specific divergent era shifts and feeds OD supplier-risk diagnostics when `trade_od.enabled=true`.
 
 ## TEMP items shipped in the template
 - **Identity upstream defaults:** stage yields default to `1.0` and loss routes to canonical sinks when detailed measured yields/loss splits are not yet available for all slices.
-- **Pre-OD trade scope:** primary availability remains refining-anchored aggregate input (OD trade dimensions `c/o/d` are not active yet).
+- **Incremental OD trade scope:** OD trade allocator is enabled only when `trade_od.enabled=true`, and currently runs on the configured historical window with fallback to legacy net-import balance outside that window.
 
 Replace TEMP items before using results for interpretation.

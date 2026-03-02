@@ -18,7 +18,7 @@
 # Section 3) Includes contract
 # - Required includes: time, regions, materials, end_uses, stages, qualities,
 #   coupling, indicators, variables.
-# - Optional include: trade, scenarios.
+# - Optional include: trade, trade_od, scenarios.
 #
 # Section 4) Merge precedence (low -> high)
 # - run sd_parameters

@@ -23,12 +23,13 @@ The following subsets are configured under:
 They are provided to ease plotting and dashboard grouping:
 
 - `stocks_and_use_phase`: `Stock_in_use`, `Inflow_to_use_*`, `Outflow_from_use`
-- `primary_secondary_supply`: primary/secondary availability plus refinery and strategic inventory stock-flow channels and upstream stage losses (`Extraction_losses`, `Beneficiation_losses`, `Refining_losses`)
+- `primary_secondary_supply`: primary/secondary availability plus refinery stock-flow channels and upstream stage losses (`Extraction_losses`, `Beneficiation_losses`, `Refining_losses`)
 - `eol_and_routing`: EoL generation/collection/routing plus old-scrap routing and sorting rejects
-- `losses_surplus_and_stockpile`: fabrication/new-scrap losses, recycling/reman process losses/surplus, and strategic intent controls
+- `losses_surplus_and_stockpile`: fabrication/new-scrap losses and recycling/reman process losses/surplus
 - `circularity_ratios`: `EoL_RR`, `RIR`
 - `service_outcomes`: `Service_demand`, `Delivered_service`, `Unmet_service`, `Service_level`, `Service_deficit`
 - `coupling_signals`: `Coupling_service_stress`, `Coupling_circular_supply_stress`, `Coupling_strategic_stock_coverage_signal`, `Coupling_stress_multiplier`, `Coupling_collection_multiplier`, `SD_scarcity_multiplier_effective`, `SD_capacity_envelope`, `SD_flow_utilization`, `SD_bottleneck_pressure`, `SD_collection_bottleneck_throttle`
+- `trade_and_security`: OD supplier diversification/risk indicators (`Supplier_HHI`, `Supplier_Diversification`, `Supplier_Effective_suppliers`, `Supplier_Governance_risk_weighted`) and strategic reserve stock/intent channels (`Strategic_inventory_*`, `Strategic_stock_coverage_years`, `Strategic_fill_intent`, `Strategic_release_intent`)
 - `resilience_scalars`: `Resilience_triangle_area`, `Years_below_service_threshold`, `Max_consecutive_years_below_threshold`
 - `diagnostics`: `Mass_balance_residual_max_abs`
 
@@ -128,6 +129,10 @@ Coupling diagnostics interpretation:
 
 ## Interpretation notes
 
+- `Supplier_HHI`: concentration of import suppliers by destination-region (higher means more concentrated).
+- `Supplier_Diversification`: `1 - Supplier_HHI` (higher means more diversified).
+- `Supplier_Effective_suppliers`: inverse concentration proxy `1 / Supplier_HHI` (0 when imports are zero).
+- `Supplier_Governance_risk_weighted`: import-share-weighted supplier governance-risk proxy (from `supplier_governance_risk.csv` when available).
 - Positive final-year `Refinery_stockpile_stock` is terminal inventory (not losses).
 - Positive final-year `Strategic_inventory_stock` is terminal strategic reserve inventory (not losses).
 - `Mass_balance_residual_max_abs` should remain close to zero and within configured tolerance.

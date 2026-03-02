@@ -241,6 +241,54 @@ class CouplingConfig(BaseModel):
     signals: Dict[str, Any] = Field(default_factory=dict)
 
 
+class TradeODConfig(BaseModel):
+    enabled: bool = False
+    observed_flow_source: str = "trade_od_observed"
+    weights_source: str = "trade_od_weights"
+    constraints_source: str = "trade_od_constraints"
+    commodities: List[str] = Field(
+        default_factory=lambda: ["concentrates", "refined_metal", "scrap"]
+    )
+    historical_window_start_year: int = 1995
+    historical_window_end_year: int = 2024
+    fallback_mode_outside_window: Literal["legacy_net_import_balance"] = "legacy_net_import_balance"
+    rolling_weight_window_years: int = 3
+    allocator_max_reallocation_passes: int = 1
+    capacity_cap_hybrid_mode: Literal["min_empirical_sd", "empirical_only", "sd_only"] = "min_empirical_sd"
+    capacity_cap_sd_multiplier: float = 1.0
+    capacity_cap_empirical_quantile: float = 0.75
+    capacity_cap_empirical_window_years: int = 5
+    coupling_relax_lambda_0_1: float = 0.30
+
+    @model_validator(mode="after")
+    def _validate_trade_od(self) -> "TradeODConfig":
+        if not self.observed_flow_source.strip():
+            raise ValueError("trade_od.observed_flow_source must be non-empty.")
+        if not self.weights_source.strip():
+            raise ValueError("trade_od.weights_source must be non-empty.")
+        if not self.constraints_source.strip():
+            raise ValueError("trade_od.constraints_source must be non-empty.")
+        if self.historical_window_end_year < self.historical_window_start_year:
+            raise ValueError(
+                "trade_od.historical_window_end_year must be >= historical_window_start_year."
+            )
+        if self.rolling_weight_window_years <= 0:
+            raise ValueError("trade_od.rolling_weight_window_years must be > 0.")
+        if self.allocator_max_reallocation_passes < 0:
+            raise ValueError("trade_od.allocator_max_reallocation_passes must be >= 0.")
+        if not (0.0 <= self.capacity_cap_empirical_quantile <= 1.0):
+            raise ValueError("trade_od.capacity_cap_empirical_quantile must be in [0,1].")
+        if self.capacity_cap_sd_multiplier <= 0:
+            raise ValueError("trade_od.capacity_cap_sd_multiplier must be > 0.")
+        if self.capacity_cap_empirical_window_years <= 0:
+            raise ValueError("trade_od.capacity_cap_empirical_window_years must be > 0.")
+        if not (0.0 <= self.coupling_relax_lambda_0_1 <= 1.0):
+            raise ValueError("trade_od.coupling_relax_lambda_0_1 must be in [0,1].")
+        if not self.commodities:
+            raise ValueError("trade_od.commodities must contain at least one item.")
+        return self
+
+
 class ScenarioProfilesConfig(BaseModel):
     enabled: bool = False
     csv_globs: List[str] = Field(default_factory=list)
@@ -523,6 +571,7 @@ class IncludesConfig(BaseModel):
     stages: str | None = None
     qualities: str | None = None
     trade: str | None = None
+    trade_od: str | None = None
     coupling: str
     indicators: str
     variables: str
@@ -588,6 +637,7 @@ class RunConfig(BaseModel):
     dimensions: DimensionsConfig | None = None
     mfa_graph: MFAGraphConfig | None = None
     coupling: CouplingConfig | None = None
+    trade_od: TradeODConfig = Field(default_factory=TradeODConfig)
     indicators: IndicatorsConfig | None = None
     variables: Dict[str, VariableMeta] | None = None
 

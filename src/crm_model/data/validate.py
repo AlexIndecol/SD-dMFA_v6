@@ -79,6 +79,7 @@ def validate_exogenous_inputs(cfg: RunConfig, *, repo_root: Path) -> List[str]:
             "end_use_shares",
             "service_activity",
             "material_intensity",
+            "supplier_governance_risk",
         }:
             ycol = "year"
             ymin = int(df[ycol].min())
@@ -87,6 +88,22 @@ def validate_exogenous_inputs(cfg: RunConfig, *, repo_root: Path) -> List[str]:
                 raise ValueError(
                     f"{var_name} year coverage {ymin}-{ymax} does not cover scenario years {years[0]}-{years[-1]}"
                 )
+
+        if var_name == "supplier_governance_risk":
+            if "origin_region" not in df.columns:
+                raise ValueError("supplier_governance_risk must contain column 'origin_region'.")
+            origin = df["origin_region"].astype(str).map(normalize_region)
+            bad_origin = set(origin.unique()) - regions
+            if bad_origin:
+                warnings.append(
+                    "supplier_governance_risk: contains origin_region values not in configured regions: "
+                    f"{sorted(bad_origin)}"
+                )
+            v = pd.to_numeric(df["value"], errors="coerce").astype(float)
+            if v.isna().any():
+                raise ValueError("supplier_governance_risk contains non-numeric 'value'.")
+            if (v < 0).any() or (v > 1).any():
+                raise ValueError("supplier_governance_risk.value must be in [0,1].")
 
         if var_name == "stock_in_use":
             ycol = "year"

@@ -224,6 +224,20 @@ flowchart LR
 
 ## Update rule
 
+## OD Trade Extension (Current Increment)
+
+When `trade_od.enabled=true`, the runtime executes an additional OD allocation layer
+after per-slice SD-dMFA runs:
+
+1. Inputs: `trade_od_observed`, `trade_od_weights`, `trade_od_constraints`.
+2. Hybrid caps: empirical cap combined with SD capacity-envelope-derived cap.
+3. Outputs: `trade_od_flows.csv`, `trade_od_supplier_shares.csv`,
+   `trade_od_supplier_diversification.csv`,
+   `trade_od_allocator_diagnostics.csv`, `trade_od_imports_exports.csv`.
+
+Outside the configured OD historical window, the model falls back to legacy
+regional net-import balance behavior.
+
 Update this diagram whenever any of the following changes:
 
 - `configs/coupling.yml`

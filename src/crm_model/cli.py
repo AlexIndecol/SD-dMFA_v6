@@ -38,8 +38,12 @@ from crm_model.data import (
     load_primary_refined_output,
     load_remanufacturing_end_use_eligibility,
     load_service_activity,
+    load_supplier_governance_risk,
     load_stage_yields_losses,
     load_stock_in_use,
+    load_trade_od_constraints,
+    load_trade_od_observed,
+    load_trade_od_weights,
     material_intensity_t,
     primary_refined_net_imports_tr,
     primary_refined_output_tr,
@@ -70,6 +74,7 @@ from crm_model.scenario_profiles import (
     build_variant_payload_from_profiles,
     load_reporting_profile_csv,
 )
+from crm_model.trade import run_trade_od_allocator, validate_trade_od_sources
 from crm_model.utils import archive_old_timestamped_runs, scenario_variant_root
 
 
@@ -798,6 +803,7 @@ def _apply_transition_policy_adjustments(
 _TABLE_CACHE: Dict[Tuple[str, str, int, int], Any] = {}
 _ARRAY_CACHE: Dict[Tuple[Any, ...], Any] = {}
 _COUPLING_WARM_START: Dict[Tuple[Any, ...], Tuple[float, float, float]] = {}
+_LAST_TRADE_OD_ARTIFACTS: Dict[Tuple[str, str], Dict[str, pd.DataFrame]] = {}
 _CACHE_LOCK = Lock()
 
 
@@ -943,6 +949,55 @@ def run_one_variant(
         if stock_path.exists():
             stock_df, stock_sig = _load_table_cached(stock_path, load_stock_in_use)
 
+    trade_od_cfg = cfg.trade_od
+    trade_od_observed_df = None
+    trade_od_weights_df = None
+    trade_od_constraints_df = None
+    supplier_governance_risk_df = None
+    if "supplier_governance_risk" in vars_:
+        supplier_risk_path = _resolve_exogenous_path(repo_root, vars_["supplier_governance_risk"].path)
+        if supplier_risk_path.exists():
+            supplier_governance_risk_df, _ = _load_table_cached(
+                supplier_risk_path, load_supplier_governance_risk
+            )
+    if bool(getattr(trade_od_cfg, "enabled", False)):
+        for source_name in [
+            trade_od_cfg.observed_flow_source,
+            trade_od_cfg.weights_source,
+            trade_od_cfg.constraints_source,
+        ]:
+            if source_name not in vars_:
+                raise ValueError(
+                    f"trade_od enabled but variable '{source_name}' is missing in registry/variable_registry.yml."
+                )
+        trade_od_observed_path = _resolve_exogenous_path(
+            repo_root, vars_[trade_od_cfg.observed_flow_source].path
+        )
+        trade_od_weights_path = _resolve_exogenous_path(
+            repo_root, vars_[trade_od_cfg.weights_source].path
+        )
+        trade_od_constraints_path = _resolve_exogenous_path(
+            repo_root, vars_[trade_od_cfg.constraints_source].path
+        )
+        if not trade_od_observed_path.exists():
+            raise FileNotFoundError(f"trade_od observed source missing: {trade_od_observed_path}")
+        if not trade_od_weights_path.exists():
+            raise FileNotFoundError(f"trade_od weights source missing: {trade_od_weights_path}")
+        if not trade_od_constraints_path.exists():
+            raise FileNotFoundError(f"trade_od constraints source missing: {trade_od_constraints_path}")
+
+        trade_od_observed_df, _ = _load_table_cached(trade_od_observed_path, load_trade_od_observed)
+        trade_od_weights_df, _ = _load_table_cached(trade_od_weights_path, load_trade_od_weights)
+        trade_od_constraints_df, _ = _load_table_cached(trade_od_constraints_path, load_trade_od_constraints)
+        validate_trade_od_sources(
+            observed_flows=trade_od_observed_df,
+            weights=trade_od_weights_df,
+            constraints=trade_od_constraints_df,
+            materials=[m.name for m in dims.materials],
+            regions=dims.regions,
+            commodities=trade_od_cfg.commodities,
+        )
+
     years_key = tuple(int(y) for y in years)
     calibration_years_key = tuple(int(y) for y in time.calibration_years)
     end_uses_key = tuple(str(eu) for eu in dims.end_uses)
@@ -952,6 +1007,7 @@ def run_one_variant(
     summary_rows: List[Dict[str, Any]] = []
     coupling_trace_rows: List[Dict[str, Any]] = []
     coupling_convergence_rows: List[Dict[str, Any]] = []
+    sd_capacity_by_material_region: Dict[Tuple[str, str], np.ndarray] = {}
 
     for mat in dims.materials:
         material = mat.name
@@ -1295,6 +1351,9 @@ def run_one_variant(
                 coupling=coupling_payload,
                 service_level_threshold=service_level_threshold,
             )
+            sd_capacity_by_material_region[(material, region)] = (
+                res.sd.capacity_envelope.reindex(years).to_numpy(dtype=float)
+            )
             final_service_signal = float(res.meta.get("final_service_stress_signal", np.nan))
             final_circular_signal = float(res.meta.get("final_circular_supply_stress_signal", np.nan))
             final_strategic_signal = float(res.meta.get("final_strategic_stock_coverage_signal", np.nan))
@@ -1438,6 +1497,99 @@ def run_one_variant(
                     }
                 )
 
+    trade_artifacts = {
+        "trade_od_flows": pd.DataFrame(),
+        "trade_od_supplier_shares": pd.DataFrame(),
+        "trade_od_supplier_diversification": pd.DataFrame(),
+        "trade_od_allocator_diagnostics": pd.DataFrame(),
+        "trade_od_imports_exports": pd.DataFrame(),
+        "sd_capacity_envelope_by_slice": pd.DataFrame(),
+    }
+    cap_rows: List[Dict[str, Any]] = []
+    for (material, region), arr in sd_capacity_by_material_region.items():
+        for y, v in zip(years, arr.tolist()):
+            cap_rows.append(
+                {
+                    "year": int(y),
+                    "material": str(material),
+                    "region": str(region),
+                    "capacity_envelope": float(v),
+                }
+            )
+    if cap_rows:
+        trade_artifacts["sd_capacity_envelope_by_slice"] = pd.DataFrame(cap_rows)
+    if (
+        bool(getattr(trade_od_cfg, "enabled", False))
+        and trade_od_observed_df is not None
+        and trade_od_weights_df is not None
+        and trade_od_constraints_df is not None
+    ):
+        trade_out = run_trade_od_allocator(
+            years=years,
+            materials=[m.name for m in dims.materials],
+            regions=dims.regions,
+            commodities=list(trade_od_cfg.commodities),
+            observed_flows=trade_od_observed_df,
+            weights=trade_od_weights_df,
+            constraints=trade_od_constraints_df,
+            sd_capacity_envelope_by_material_region=sd_capacity_by_material_region,
+            supplier_governance_risk=supplier_governance_risk_df,
+            historical_window_start_year=int(trade_od_cfg.historical_window_start_year),
+            historical_window_end_year=int(trade_od_cfg.historical_window_end_year),
+            capacity_cap_hybrid_mode=str(trade_od_cfg.capacity_cap_hybrid_mode),
+            capacity_cap_sd_multiplier=float(trade_od_cfg.capacity_cap_sd_multiplier),
+            coupling_relax_lambda_0_1=float(trade_od_cfg.coupling_relax_lambda_0_1),
+            max_reallocation_passes=int(trade_od_cfg.allocator_max_reallocation_passes),
+        )
+        if not trade_out.flows.empty:
+            trade_artifacts["trade_od_flows"] = trade_out.flows.assign(phase=phase, variant=variant_name)
+            trade_artifacts["trade_od_supplier_shares"] = trade_out.supplier_shares.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            trade_artifacts["trade_od_supplier_diversification"] = trade_out.supplier_diversification.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            trade_artifacts["trade_od_allocator_diagnostics"] = trade_out.diagnostics.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            trade_artifacts["trade_od_imports_exports"] = trade_out.imports_exports.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            keep_years_trade = years if phase in {"calibration"} else report_years
+            div_keep = trade_out.supplier_diversification[
+                trade_out.supplier_diversification["year"].isin(set(keep_years_trade))
+            ].copy()
+            trade_indicator_cols = {
+                "supplier_hhi_0_1": "Supplier_HHI",
+                "supplier_diversification_0_1": "Supplier_Diversification",
+                "effective_supplier_count": "Supplier_Effective_suppliers",
+                "supplier_governance_risk_weighted_0_1": "Supplier_Governance_risk_weighted",
+            }
+            for col_name, ind_name in trade_indicator_cols.items():
+                if ind_name not in allowed_ts or col_name not in div_keep.columns:
+                    continue
+                sub = div_keep[["year", "material", "region", col_name]].copy()
+                sub = sub[sub[col_name].notna()]
+                for row in sub.itertuples(index=False):
+                    ts_rows.append(
+                        {
+                            "phase": phase,
+                            "variant": variant_name,
+                            "material": str(row.material),
+                            "region": str(row.region),
+                            "year": int(row.year),
+                            "indicator": ind_name,
+                            "value": float(getattr(row, col_name)),
+                        }
+                    )
+
+    with _CACHE_LOCK:
+        _LAST_TRADE_OD_ARTIFACTS[(phase, variant_name)] = trade_artifacts
+
     return (
         pd.DataFrame(ts_rows),
         pd.DataFrame(scalar_rows),
@@ -1504,6 +1656,12 @@ def main() -> int:
     all_summary = []
     all_coupling_trace = []
     all_coupling_convergence = []
+    all_trade_flows = []
+    all_trade_supplier_shares = []
+    all_trade_supplier_diversification = []
+    all_trade_diagnostics = []
+    all_trade_imports_exports = []
+    all_trade_capacity_envelope = []
 
     for ph in phases:
         ts_df, scalar_df, summary_df, coupling_trace_df, coupling_conv_df = run_one_variant(
@@ -1518,6 +1676,28 @@ def main() -> int:
         all_summary.append(summary_df)
         all_coupling_trace.append(coupling_trace_df)
         all_coupling_convergence.append(coupling_conv_df)
+        with _CACHE_LOCK:
+            trade_phase_payload = _LAST_TRADE_OD_ARTIFACTS.get((ph, args.variant), {})
+        if not trade_phase_payload:
+            continue
+        flows_df = trade_phase_payload.get("trade_od_flows", pd.DataFrame())
+        shares_df = trade_phase_payload.get("trade_od_supplier_shares", pd.DataFrame())
+        div_df = trade_phase_payload.get("trade_od_supplier_diversification", pd.DataFrame())
+        diag_df = trade_phase_payload.get("trade_od_allocator_diagnostics", pd.DataFrame())
+        ie_df = trade_phase_payload.get("trade_od_imports_exports", pd.DataFrame())
+        cap_df = trade_phase_payload.get("sd_capacity_envelope_by_slice", pd.DataFrame())
+        if not flows_df.empty:
+            all_trade_flows.append(flows_df)
+        if not shares_df.empty:
+            all_trade_supplier_shares.append(shares_df)
+        if not div_df.empty:
+            all_trade_supplier_diversification.append(div_df)
+        if not diag_df.empty:
+            all_trade_diagnostics.append(diag_df)
+        if not ie_df.empty:
+            all_trade_imports_exports.append(ie_df)
+        if not cap_df.empty:
+            all_trade_capacity_envelope.append(cap_df.assign(phase=ph, variant=args.variant))
 
     ts = pd.concat(all_ts, ignore_index=True) if all_ts else pd.DataFrame()
     scalar = pd.concat(all_scalar, ignore_index=True) if all_scalar else pd.DataFrame()
@@ -1525,6 +1705,24 @@ def main() -> int:
     coupling_trace = pd.concat(all_coupling_trace, ignore_index=True) if all_coupling_trace else pd.DataFrame()
     coupling_convergence = (
         pd.concat(all_coupling_convergence, ignore_index=True) if all_coupling_convergence else pd.DataFrame()
+    )
+    trade_od_flows = pd.concat(all_trade_flows, ignore_index=True) if all_trade_flows else pd.DataFrame()
+    trade_od_supplier_shares = (
+        pd.concat(all_trade_supplier_shares, ignore_index=True) if all_trade_supplier_shares else pd.DataFrame()
+    )
+    trade_od_supplier_diversification = (
+        pd.concat(all_trade_supplier_diversification, ignore_index=True)
+        if all_trade_supplier_diversification
+        else pd.DataFrame()
+    )
+    trade_od_allocator_diagnostics = (
+        pd.concat(all_trade_diagnostics, ignore_index=True) if all_trade_diagnostics else pd.DataFrame()
+    )
+    trade_od_imports_exports = (
+        pd.concat(all_trade_imports_exports, ignore_index=True) if all_trade_imports_exports else pd.DataFrame()
+    )
+    trade_od_sd_capacity_envelope = (
+        pd.concat(all_trade_capacity_envelope, ignore_index=True) if all_trade_capacity_envelope else pd.DataFrame()
     )
 
     # Console summary
@@ -1620,6 +1818,18 @@ def main() -> int:
         scalar.to_csv(ind_dir / "scalar_metrics.csv", index=False)
         coupling_trace.to_csv(ind_dir / "coupling_signals_iteration_year.csv", index=False)
         coupling_convergence.to_csv(ind_dir / "coupling_convergence_iteration.csv", index=False)
+        if not trade_od_flows.empty:
+            trade_od_flows.to_csv(ind_dir / "trade_od_flows.csv", index=False)
+        if not trade_od_supplier_shares.empty:
+            trade_od_supplier_shares.to_csv(ind_dir / "trade_od_supplier_shares.csv", index=False)
+        if not trade_od_supplier_diversification.empty:
+            trade_od_supplier_diversification.to_csv(ind_dir / "trade_od_supplier_diversification.csv", index=False)
+        if not trade_od_allocator_diagnostics.empty:
+            trade_od_allocator_diagnostics.to_csv(ind_dir / "trade_od_allocator_diagnostics.csv", index=False)
+        if not trade_od_imports_exports.empty:
+            trade_od_imports_exports.to_csv(ind_dir / "trade_od_imports_exports.csv", index=False)
+        if not trade_od_sd_capacity_envelope.empty:
+            trade_od_sd_capacity_envelope.to_csv(ind_dir / "trade_od_sd_capacity_envelope.csv", index=False)
         summary.to_csv(run_dir / "summary.csv", index=False)
 
         moved = archive_old_timestamped_runs(scenario_root, keep_last=3)

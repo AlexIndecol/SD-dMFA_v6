@@ -11,6 +11,7 @@ includes:
   stages: ../stages.yml
   qualities: ../qualities.yml
   trade: ../trade.yml
+  trade_od: ../trade_od.yml
   coupling: ../coupling.yml
   indicators: ../indicators.yml
   variables: ../../registry/variable_registry.yml

@@ -42,12 +42,6 @@ mfa_state_and_flow_metrics:
     - Refinery_stockpile_inflow
     - Refinery_stockpile_outflow
     - Refinery_stockpile_stock
-    - Strategic_inventory_inflow
-    - Strategic_inventory_outflow
-    - Strategic_inventory_stock
-    - Strategic_stock_coverage_years
-    - Strategic_fill_intent
-    - Strategic_release_intent
     - Remanufacture_process_losses
     - Remanufacture_surplus_unused
     - Extraction_losses
@@ -73,10 +67,6 @@ mfa_state_and_flow_metrics:
       - Refinery_stockpile_inflow
       - Refinery_stockpile_outflow
       - Refinery_stockpile_stock
-      - Strategic_inventory_inflow
-      - Strategic_inventory_outflow
-      - Strategic_inventory_stock
-      - Strategic_stock_coverage_years
       - Extraction_losses
       - Beneficiation_losses
       - Refining_losses
@@ -100,8 +90,6 @@ mfa_state_and_flow_metrics:
       - New_scrap_to_residue
       - Recycling_process_losses
       - Recycling_surplus_unused
-      - Strategic_fill_intent
-      - Strategic_release_intent
       - Remanufacture_process_losses
       - Remanufacture_surplus_unused
     circularity_ratios:
@@ -127,6 +115,16 @@ resilience_service_indicators:
     - SD_flow_utilization
     - SD_bottleneck_pressure
     - SD_collection_bottleneck_throttle
+    - Supplier_HHI
+    - Supplier_Diversification
+    - Supplier_Effective_suppliers
+    - Supplier_Governance_risk_weighted
+    - Strategic_inventory_inflow
+    - Strategic_inventory_outflow
+    - Strategic_inventory_stock
+    - Strategic_stock_coverage_years
+    - Strategic_fill_intent
+    - Strategic_release_intent
     - Resilience_triangle_area
     - Years_below_service_threshold
     - Max_consecutive_years_below_threshold
@@ -148,6 +146,17 @@ resilience_service_indicators:
       - SD_flow_utilization
       - SD_bottleneck_pressure
       - SD_collection_bottleneck_throttle
+    trade_and_security:
+      - Supplier_HHI
+      - Supplier_Diversification
+      - Supplier_Effective_suppliers
+      - Supplier_Governance_risk_weighted
+      - Strategic_inventory_inflow
+      - Strategic_inventory_outflow
+      - Strategic_inventory_stock
+      - Strategic_stock_coverage_years
+      - Strategic_fill_intent
+      - Strategic_release_intent
     resilience_scalars:
       - Resilience_triangle_area
       - Years_below_service_threshold

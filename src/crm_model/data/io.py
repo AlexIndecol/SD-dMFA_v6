@@ -170,6 +170,99 @@ def load_material_intensity(path: str | Path) -> pd.DataFrame:
     return load_year_material_region_series(path)
 
 
+def load_supplier_governance_risk(path: str | Path) -> pd.DataFrame:
+    """Load optional supplier governance-risk proxy for OD supplier weighting.
+
+    Expected columns: year, origin_region, value where value is in [0,1].
+    """
+    df = _read_csv(path, {"year", "origin_region", "value"}).copy()
+    df["year"] = pd.to_numeric(df["year"], errors="coerce").astype(int)
+    df["origin_region"] = df["origin_region"].astype(str).map(normalize_region)
+    df["value"] = pd.to_numeric(df["value"], errors="coerce").astype(float)
+    if df["value"].isna().any():
+        bad = df[df["value"].isna()].head(10)
+        raise ValueError(
+            "supplier_governance_risk contains non-numeric values. Examples:\n"
+            + bad.to_string(index=False)
+        )
+    if (df["value"] < 0).any() or (df["value"] > 1).any():
+        bad = df[(df["value"] < 0) | (df["value"] > 1)].head(10)
+        raise ValueError(
+            "supplier_governance_risk.value must be in [0,1]. Examples:\n"
+            + bad.to_string(index=False)
+        )
+    return df
+
+
+def load_trade_od_observed(path: str | Path) -> pd.DataFrame:
+    req = {"year", "material", "commodity", "origin_region", "destination_region", "flow_kt"}
+    df = _normalize_df(_read_csv(path, req)).copy()
+    df["year"] = df["year"].astype(int)
+    df["material"] = df["material"].astype(str)
+    df["commodity"] = df["commodity"].astype(str)
+    df["origin_region"] = df["origin_region"].astype(str).map(normalize_region)
+    df["destination_region"] = df["destination_region"].astype(str).map(normalize_region)
+    df["flow_kt"] = pd.to_numeric(df["flow_kt"], errors="coerce").astype(float)
+    if df["flow_kt"].isna().any():
+        bad = df[df["flow_kt"].isna()].head(10)
+        raise ValueError("trade_od observed contains non-numeric flow_kt values. Examples:\n" + bad.to_string(index=False))
+    if (df["flow_kt"] < 0).any():
+        bad = df[df["flow_kt"] < 0].head(10)
+        raise ValueError("trade_od observed contains negative flow_kt values. Examples:\n" + bad.to_string(index=False))
+    return df
+
+
+def load_trade_od_weights(path: str | Path) -> pd.DataFrame:
+    req = {"year", "material", "commodity", "origin_region", "destination_region", "weight_0_1"}
+    df = _normalize_df(_read_csv(path, req)).copy()
+    df["year"] = df["year"].astype(int)
+    df["material"] = df["material"].astype(str)
+    df["commodity"] = df["commodity"].astype(str)
+    df["origin_region"] = df["origin_region"].astype(str).map(normalize_region)
+    df["destination_region"] = df["destination_region"].astype(str).map(normalize_region)
+    df["weight_0_1"] = pd.to_numeric(df["weight_0_1"], errors="coerce").astype(float)
+    if df["weight_0_1"].isna().any():
+        bad = df[df["weight_0_1"].isna()].head(10)
+        raise ValueError("trade_od weights contains non-numeric weight_0_1 values. Examples:\n" + bad.to_string(index=False))
+    if (df["weight_0_1"] < 0).any():
+        bad = df[df["weight_0_1"] < 0].head(10)
+        raise ValueError("trade_od weights contains negative weight_0_1 values. Examples:\n" + bad.to_string(index=False))
+    return df
+
+
+def load_trade_od_constraints(path: str | Path) -> pd.DataFrame:
+    req = {
+        "year",
+        "material",
+        "commodity",
+        "region",
+        "supply_avail_kt",
+        "import_need_kt",
+        "export_cap_raw_kt",
+        "exportable_kt",
+    }
+    df = _normalize_df(_read_csv(path, req)).copy()
+    df["year"] = df["year"].astype(int)
+    df["material"] = df["material"].astype(str)
+    df["commodity"] = df["commodity"].astype(str)
+    df["region"] = df["region"].astype(str).map(normalize_region)
+    for col in ["supply_avail_kt", "import_need_kt", "export_cap_raw_kt", "exportable_kt"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").astype(float)
+        if df[col].isna().any():
+            bad = df[df[col].isna()].head(10)
+            raise ValueError(
+                f"trade_od constraints contains non-numeric values in '{col}'. Examples:\n"
+                + bad.to_string(index=False)
+            )
+        if (df[col] < 0).any():
+            bad = df[df[col] < 0].head(10)
+            raise ValueError(
+                f"trade_od constraints contains negative values in '{col}'. Examples:\n"
+                + bad.to_string(index=False)
+            )
+    return df
+
+
 def final_demand_t(
     demand_df: pd.DataFrame,
     *,

@@ -192,3 +192,27 @@ Guardrails:
 1. Keep strategic reserve disabled during baseline calibration.
 2. Keep SD gates in reporting phase unless historical reconstruction is explicitly intended.
 3. Require convergence and baseline-drift checks after any SD-parameter updates.
+
+## 12) Incremental OD-trade calibration (endogenous trade vs exogenous OD data)
+
+When `trade_od.enabled=true`, calibrate trade-layer controls in a second stage after baseline stock calibration:
+
+```bash
+PYTHONPATH=src python scripts/calibration/calibrate_trade_od.py \
+  --config configs/runs/mvp.yml \
+  --variant baseline \
+  --phase reporting \
+  --lambda-grid 0.1,0.2,0.3,0.4,0.5 \
+  --sd-cap-multiplier-grid 0.8,1.0,1.2
+```
+
+This writes:
+
+- `trade_od_calibration_grid.csv` (all evaluated candidates + metrics)
+- `best_trade_od_patch.yml` (ready-to-apply patch snippet)
+- `trade_od_calibration_summary.yml` (best settings + metadata)
+
+Current calibrated knobs:
+
+1. `trade_od.coupling_relax_lambda_0_1`
+2. `trade_od.capacity_cap_sd_multiplier`

@@ -17,6 +17,12 @@ Core files:
 5. `indicators/scalar_metrics.csv`: reporting-window scalar resilience metrics.
 6. `indicators/coupling_signals_iteration_year.csv`: by-iteration coupling traces.
 7. `indicators/coupling_convergence_iteration.csv`: iteration convergence summary.
+8. `indicators/trade_od_flows.csv` (optional): constrained OD flows when `trade_od.enabled=true`.
+9. `indicators/trade_od_supplier_shares.csv` (optional): OD-derived supplier shares by destination.
+10. `indicators/trade_od_supplier_diversification.csv` (optional): HHI/diversification/effective-supplier and governance-weighted supplier risk metrics.
+11. `indicators/trade_od_allocator_diagnostics.csv` (optional): allocator pass diagnostics.
+12. `indicators/trade_od_imports_exports.csv` (optional): OD-aggregated imports/exports by region.
+13. `indicators/trade_od_sd_capacity_envelope.csv` (optional): SD capacity envelope series used by OD caps.
 
 ## 2) First files to inspect after a run
 

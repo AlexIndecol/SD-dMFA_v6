@@ -199,6 +199,47 @@ Columns:
 
 Used only to compute calibration/validation metrics (e.g., RMSE) in the calibration window.
 
+## `data/exogenous/trade_od/*` (optional; incremental OD-trade layer)
+
+These files provide BACI-derived OD foundations for the optional constrained trade allocator
+(`configs/trade_od.yml`):
+
+- `baci_od_flow_observed.csv`
+  - columns: `year, material, commodity, origin_region, destination_region, flow_kt`
+- `baci_od_weights_rolling3.csv`
+  - columns: `year, material, commodity, origin_region, destination_region, weight_0_1`
+- `baci_od_constraints_inputs.csv`
+  - columns: `year, material, commodity, region, supply_avail_kt, import_need_kt, export_cap_raw_kt, exportable_kt`
+- `baci_od_flow_constrained.csv`
+- `baci_od_supplier_shares.csv`
+- `baci_od_allocator_diagnostics.csv`
+- `baci_od_assumptions.md`
+
+Model runtime consumes the first three files when `trade_od.enabled=true`.
+The assumptions file is mirrored in documentation at `docs/model/BACI_OD_ASSUMPTIONS.md`.
+
+## `data/exogenous/supplier_governance_risk.csv` (optional; WGI-style weighting)
+
+Columns:
+- `year` (int)
+- `origin_region` (str): `EU27`, `China`, `RoW`
+- `value` (float): governance-risk proxy in `[0,1]` (higher = riskier)
+
+Current shipped assumptions use supplier-specific piecewise era shifts
+(divergent relative weighting, not a common shift):
+
+- Baselines:
+  - `EU27 = 0.20`
+  - `China = 0.45`
+  - `RoW = 0.55`
+- Era shifts:
+  - `1870–1949`: `EU27 +0.08`, `China +0.05`, `RoW +0.02`
+  - `1950–1989`: `EU27 +0.02`, `China +0.05`, `RoW +0.07`
+  - `1990–2100`: `EU27 -0.03`, `China +0.02`, `RoW +0.10`
+
+This is intended for HHI/WGI-type supplier concentration diagnostics and can be
+replaced with external governance data when available.
+
 ## Templates
 
 Starter templates for optional demand-transformation inputs are available in:

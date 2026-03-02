@@ -105,6 +105,23 @@ In SD, the exogenous demand trajectory is treated as *desired* demand:
   `capacity_envelope -> flow_utilization -> bottleneck_pressure -> scarcity/price -> capacity_target -> capacity_envelope`.
 - Bottleneck pressure can amplify scarcity (`bottleneck_scarcity_gain`) and dampen collection pressure response (`bottleneck_collection_sensitivity`).
 
+27) **Incremental OD trade integration (weights + constrained allocator)**
+- Optional OD allocator is configured in `configs/trade_od.yml` and disabled by default (`trade_od.enabled=false`).
+- OD inputs are loaded from:
+  - `data/exogenous/trade_od/baci_od_flow_observed.csv`
+  - `data/exogenous/trade_od/baci_od_weights_rolling3.csv`
+  - `data/exogenous/trade_od/baci_od_constraints_inputs.csv`
+- Commodity scope is fixed to:
+  `concentrates`, `refined_metal`, `scrap`.
+- Runtime allocator uses weighted proposal + destination absorption + bounded reallocation
+  with hybrid export caps:
+  `min(empirical_cap, sd_capacity_envelope_cap)` when `capacity_cap_hybrid_mode=min_empirical_sd`.
+- OD runtime is active only on configured historical window years and falls back to legacy
+  regional net-import balance outside that window.
+- Runtime exports supplier diversification diagnostics from constrained OD flows:
+  `Supplier_HHI`, `Supplier_Diversification`, `Supplier_Effective_suppliers`,
+  and governance-weighted `Supplier_Governance_risk_weighted`.
+
 20) **Primary availability balance and compatibility window**
 - Exogenous `primary_refined_output` and `primary_refined_net_imports` are required canonical runtime inputs.
 - Primary availability to refining uses:
@@ -147,5 +164,4 @@ In SD, the exogenous demand trajectory is treated as *desired* demand:
 
 - **Lifetime data source** (family support is implemented; data provenance/selection is still a project choice).
 - **Criticality framework choice** (EU CRM-style, Graedel/Yale, etc.) and the required time-dynamic inputs.
-- **Trade / inter-regional exchange** (MVP treats regions independently).
 - **Material- and region-specific process parameters** (yields, collection, reman shares).

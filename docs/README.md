@@ -12,6 +12,7 @@ Use this page as the entry point for model usage, configuration, calibration, an
 
 - [CONFIG_PRECEDENCE.md](./workflows/CONFIG_PRECEDENCE.md): authoritative merge order and temporal-parameter behavior.
 - [SD_CAPACITY_SCARCITY_PRICE_LOOP.md](./model/SD_CAPACITY_SCARCITY_PRICE_LOOP.md): endogenous capacity/scarcity/price/bottleneck dynamics.
+- [BACI_OD_ASSUMPTIONS.md](./model/BACI_OD_ASSUMPTIONS.md): Phase-0 OD trade data assumptions and diagnostics.
 - [INDICATORS.md](./model/INDICATORS.md): indicator formulas, output fields, and interpretation.
 - [OUTPUTS_GUIDE.md](./model/OUTPUTS_GUIDE.md): where outputs are written and how to read them.
 
