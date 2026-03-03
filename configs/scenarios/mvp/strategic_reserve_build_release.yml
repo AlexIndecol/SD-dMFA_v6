@@ -91,7 +91,7 @@ strategy:
     start_year: 2025
     value: 0.2
 shocks:
-  primary_refined_net_imports:
+  trade_refined_import_need_multiplier:
     start_year: 2025
     duration_years: 15
     multiplier: 1.15
@@ -168,7 +168,7 @@ dimension_overrides:
       start_year: 2025
       value: 0.25
   shocks:
-    primary_refined_net_imports:
+    trade_refined_import_need_multiplier:
       start_year: 2025
       duration_years: 15
       multiplier: 1.35

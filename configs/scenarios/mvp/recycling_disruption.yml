@@ -61,7 +61,7 @@ dimension_overrides:
       start_year: 2025
       duration_years: 15
       multiplier: 0.55
-    primary_refined_net_imports:
+    trade_refined_import_need_multiplier:
       start_year: 2025
       duration_years: 15
       multiplier: 0.75
@@ -85,7 +85,7 @@ dimension_overrides:
       start_year: 2025
       duration_years: 15
       multiplier: 0.65
-    primary_refined_net_imports:
+    trade_refined_import_need_multiplier:
       start_year: 2025
       duration_years: 15
       multiplier: 0.82
@@ -109,7 +109,7 @@ dimension_overrides:
       start_year: 2025
       duration_years: 15
       multiplier: 0.75
-    primary_refined_net_imports:
+    trade_refined_import_need_multiplier:
       start_year: 2025
       duration_years: 15
       multiplier: 0.88

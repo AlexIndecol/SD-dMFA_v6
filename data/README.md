@@ -67,20 +67,9 @@ Columns:
 
 Interpretation (CONFIRMED):
 - This represents **domestic primary refined metal output** (metal content) within the region.
-- It is combined with primary refined net imports to estimate primary metal availability to refining.
-
-## `data/exogenous/primary_refined_net_imports.csv`
-Columns:
-- `year` (int)
-- `material` (str)
-- `region` (str)
-- `value` (float): net imports of primary refined metal [t/year]
-
-Interpretation:
-- Positive values increase primary metal available to refining.
-- Negative values are allowed (net exporter).
-- The model uses:
-  `primary_available_to_refining(t, region) = max(0, primary_refined_output(t, region) + primary_refined_net_imports(t, region))`.
+- In endogenous-trade runtime, primary availability also includes trade adjustments
+  derived in-loop from OD allocation:
+  `max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)`.
 
 ## `data/exogenous/stage_yields_losses.csv`
 Columns:
@@ -202,7 +191,7 @@ Used only to compute calibration/validation metrics (e.g., RMSE) in the calibrat
 ## `data/exogenous/trade_od/*` (optional; incremental OD-trade layer)
 
 These files provide BACI-derived OD foundations for the optional constrained trade allocator
-(`configs/trade_od.yml`):
+(`configs/trade.yml` under top-level `trade_od`):
 
 - `baci_od_flow_observed.csv`
   - columns: `year, material, commodity, origin_region, destination_region, flow_kt`

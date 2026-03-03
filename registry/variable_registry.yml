@@ -39,16 +39,6 @@ primary_refined_output:
     - "Domestic primary refined metal output."
     - "Refining-anchor input for primary availability."
 
-primary_refined_net_imports:
-  path: data/exogenous/primary_refined_net_imports.csv
-  required: true
-  columns: [year, material, region, value]
-  unit: t_per_year
-  notes:
-    - "Net imports of primary refined metal into the region."
-    - "May be negative for net exporters."
-    - "Primary available to refining is computed as max(0, primary_refined_output + primary_refined_net_imports)."
-
 stage_yields_losses:
   path: data/exogenous/stage_yields_losses.csv
   required: true
@@ -131,7 +121,7 @@ trade_od_observed:
   unit: t_per_year
   notes:
     - "Observed OD matrix from BACI aggregation."
-    - "Used as reference for OD allocator validation/calibration windows."
+    - "Calibration/backtesting only; not required by endogenous runtime."
 
 trade_od_weights:
   path: data/exogenous/trade_od/baci_od_weights_rolling3.csv
@@ -156,7 +146,7 @@ trade_od_constraints:
   unit: t_per_year
   notes:
     - "OD constraint inputs used by the constrained allocator."
-    - "Runtime can combine empirical caps with SD capacity envelopes."
+    - "Calibration/backtesting helper; endogenous runtime builds constraints in-loop."
 
 supplier_governance_risk:
   path: data/exogenous/supplier_governance_risk.csv

@@ -63,7 +63,7 @@ shocks:
     start_year: 2025
     duration_years: 18
     multiplier: 0.9
-  primary_refined_net_imports:
+  trade_refined_import_need_multiplier:
     start_year: 2025
     duration_years: 18
     multiplier: 0.72
@@ -78,7 +78,7 @@ dimension_overrides:
       start_year: 2025
       duration_years: 18
       multiplier: 1.5
-    primary_refined_net_imports:
+    trade_refined_import_need_multiplier:
       start_year: 2025
       duration_years: 18
       multiplier: 0.6

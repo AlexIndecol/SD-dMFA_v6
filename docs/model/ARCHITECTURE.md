@@ -19,7 +19,7 @@ Single sources of truth:
 - Dimensions: `configs/regions.yml`, `configs/materials.yml`, `configs/end_use.yml`
 - Time windows: `configs/time.yml`
 - Coupling wiring: `configs/coupling.yml`
-- OD-trade wiring (optional): `configs/trade_od.yml`
+- Trade dimensions + OD-trade wiring (optional): `configs/trade.yml` (`trade_od` block)
 - Indicator set + parameters: `configs/indicators.yml`
 - Assumptions (CONFIRMED vs TEMP): `configs/assumptions.yml`
 - Exogenous variable registry (paths + schemas): `registry/variable_registry.yml`
@@ -41,7 +41,6 @@ Exogenous inputs (one variable per file):
 - End-use shares: `data/exogenous/end_use_shares.csv`
 - Desired demand: `data/exogenous/final_demand.csv`
 - Primary refined output: `data/exogenous/primary_refined_output.csv`
-- Primary refined net imports: `data/exogenous/primary_refined_net_imports.csv`
 - Stage yields/loss routing: `data/exogenous/stage_yields_losses.csv`
 - Collection routing rates:
   - `data/exogenous/collection_routing_rates.csv` (`recycling_rate`, `remanufacturing_rate`, `disposal_rate`)
@@ -64,8 +63,9 @@ Per **material × region**:
 2. SD outputs realized total demand.
 3. Demand is split into end-uses using exogenous shares.
 4. dMFA consumes end-use demand, lifetimes, and circularity strategy parameters.
-   Primary available to refining is computed exogenously as
-   `max(0, primary_refined_output + primary_refined_net_imports)`.
+   In endogenous-trade mode, primary availability is computed in-loop as
+   `max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)`.
+   Scrap net trade is injected through the secondary/stockpile path.
    Upstream throughput is reconstructed with explicit yields at extraction/beneficiation/refining,
    and sorting rejects are routed by configured shares to disposal/sysenv.
    Secondary material (recovered old scrap plus routed new scrap) accumulates in a refinery stockpile
@@ -92,18 +92,18 @@ Per **material × region**:
 
 The coupling is **iterative within a run**, not a fully co-simulated year-by-year integration.
 
-Optional OD trade layer:
+Optional OD trade layer (endogenous runtime mode):
 
-- When `trade_od.enabled=true`, the runtime computes constrained OD trade flows for the configured
-  historical window using:
-  - exogenous OD preference weights,
-  - empirical export caps,
-  - SD capacity-envelope-derived caps,
-  - a simple robust allocator (proposal -> destination absorption -> reallocation).
-- Runtime also derives supplier diversification diagnostics from OD flows
-  (HHI, diversification, effective supplier count, governance-risk-weighted supplier risk).
-- Outside the OD historical window, the model falls back to the legacy regional balance
-  (`primary_refined_output + primary_refined_net_imports`).
+- When `trade_od.enabled=true` and `trade_od.runtime_mode=endogenous`, trade is solved inside an
+  outer SD-dMFA loop across all regions for each material.
+- Runtime inputs required: exogenous OD preference weights (`trade_od_weights`) only.
+  Observed OD flows and exogenous constraints are calibration/backtesting-only utilities.
+- Weight handling outside observed years uses clamp+normalize (`weight_extrapolation_policy=clamp_normalize`).
+- OD allocation uses:
+  - exogenous OD weights (structural preference),
+  - endogenous per-region commodity constraints (concentrates, refined_metal, scrap),
+  - SD-capacity-envelope ceilings and configured cap controls.
+- Outputs still include OD artifacts and supplier diversification/governance-risk indicators.
 
 ## Operational run order
 

@@ -32,7 +32,7 @@ def test_dimension_scoped_variant_overrides_apply_only_to_matching_slice():
                         materials=["nickel"],
                         regions=["EU27"],
                         shocks=ShocksConfig(
-                            primary_refined_net_imports=ShockEvent(
+                            trade_refined_import_need_multiplier=ShockEvent(
                                 start_year=2025,
                                 duration_years=20,
                                 multiplier=0.7,
@@ -62,9 +62,9 @@ def test_dimension_scoped_variant_overrides_apply_only_to_matching_slice():
         region="RoW",
     )
 
-    assert "primary_refined_net_imports" in hit["shocks"]
+    assert "trade_refined_import_need_multiplier" in hit["shocks"]
     assert "collection_rate" in hit["shocks"]
-    assert "primary_refined_net_imports" not in miss["shocks"]
+    assert "trade_refined_import_need_multiplier" not in miss["shocks"]
     assert "collection_rate" not in miss["shocks"]
 
 
@@ -155,13 +155,13 @@ def test_mvp_capacity_crunch_recovery_variant_schema():
     assert variant.shocks is not None
     shocks = variant.shocks.model_dump(exclude_none=True, exclude_unset=True)
 
-    assert set(["demand_surge", "primary_refined_output", "primary_refined_net_imports"]).issubset(set(shocks.keys()))
+    assert set(["demand_surge", "primary_refined_output", "trade_refined_import_need_multiplier"]).issubset(set(shocks.keys()))
     assert int(shocks["demand_surge"]["start_year"]) == 2025
     assert int(shocks["demand_surge"]["duration_years"]) == 18
     assert int(shocks["primary_refined_output"]["start_year"]) == 2025
     assert int(shocks["primary_refined_output"]["duration_years"]) == 18
-    assert int(shocks["primary_refined_net_imports"]["start_year"]) == 2025
-    assert int(shocks["primary_refined_net_imports"]["duration_years"]) == 18
+    assert int(shocks["trade_refined_import_need_multiplier"]["start_year"]) == 2025
+    assert int(shocks["trade_refined_import_need_multiplier"]["duration_years"]) == 18
 
     assert variant.sd_parameters is not None
     assert float(variant.sd_parameters["bottleneck_scarcity_gain"]) > 0.0
@@ -311,9 +311,9 @@ def test_mvp_import_squeeze_circular_ramp_variant_schema():
     assert variant.shocks is not None
     shocks = variant.shocks.model_dump(exclude_none=True, exclude_unset=True)
     assert "primary_refined_output" in shocks
-    assert "primary_refined_net_imports" in shocks
+    assert "trade_refined_import_need_multiplier" in shocks
     assert int(shocks["primary_refined_output"]["start_year"]) == 2025
-    assert int(shocks["primary_refined_net_imports"]["start_year"]) == 2025
+    assert int(shocks["trade_refined_import_need_multiplier"]["start_year"]) == 2025
 
     tp = (
         variant.transition_policy
@@ -344,8 +344,8 @@ def test_mvp_import_squeeze_circular_ramp_variant_schema():
         material="tin",
         region="China",
     )
-    assert float(hit["shocks"]["primary_refined_net_imports"]["multiplier"]) < float(
-        miss["shocks"]["primary_refined_net_imports"]["multiplier"]
+    assert float(hit["shocks"]["trade_refined_import_need_multiplier"]["multiplier"]) < float(
+        miss["shocks"]["trade_refined_import_need_multiplier"]["multiplier"]
     )
 
 

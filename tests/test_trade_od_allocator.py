@@ -3,7 +3,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from crm_model.trade import run_trade_od_allocator, validate_trade_od_sources
+from crm_model.trade import (
+    build_endogenous_trade_constraints,
+    prepare_trade_weights_for_runtime,
+    run_trade_od_allocator,
+    validate_trade_od_sources,
+)
 
 
 def _base_trade_inputs():
@@ -179,3 +184,72 @@ def test_trade_od_supplier_diversification_indices_with_governance_risk():
     assert np.isclose(float(row["supplier_diversification_0_1"]), 2.0 / 3.0, atol=1.0e-9)
     assert np.isclose(float(row["effective_supplier_count"]), 3.0, atol=1.0e-9)
     assert np.isclose(float(row["supplier_governance_risk_weighted_0_1"]), 0.5, atol=1.0e-9)
+
+
+def test_prepare_trade_weights_for_runtime_clamp_and_normalize():
+    weights = pd.DataFrame(
+        [
+            {"year": 2000, "material": "tin", "commodity": "refined_metal", "origin_region": "EU27", "destination_region": "EU27", "weight_0_1": 0.2},
+            {"year": 2000, "material": "tin", "commodity": "refined_metal", "origin_region": "EU27", "destination_region": "China", "weight_0_1": 0.8},
+            {"year": 2000, "material": "tin", "commodity": "refined_metal", "origin_region": "EU27", "destination_region": "RoW", "weight_0_1": 0.0},
+        ]
+    )
+    out = prepare_trade_weights_for_runtime(
+        weights=weights,
+        years=[1999, 2000, 2001],
+        materials=["tin"],
+        regions=["EU27", "China", "RoW"],
+        commodities=["refined_metal"],
+        policy="clamp_normalize",
+    )
+    sub = out[
+        (out["material"] == "tin")
+        & (out["commodity"] == "refined_metal")
+        & (out["origin_region"] == "EU27")
+    ].sort_values(["year", "destination_region"])
+    # Pre/post window years are clamped to boundary rows.
+    first = sub[sub["year"] == 1999]["weight_0_1"].to_numpy(dtype=float)
+    mid = sub[sub["year"] == 2000]["weight_0_1"].to_numpy(dtype=float)
+    last = sub[sub["year"] == 2001]["weight_0_1"].to_numpy(dtype=float)
+    assert np.allclose(first, mid)
+    assert np.allclose(last, mid)
+    for year in [1999, 2000, 2001]:
+        row_sum = float(sub[sub["year"] == year]["weight_0_1"].sum())
+        assert np.isclose(row_sum, 1.0, atol=1.0e-12)
+
+
+def test_build_endogenous_constraints_applies_refined_need_multiplier():
+    years = [2000, 2001]
+    diag = {
+        "EU27": {
+            "refined_input_required_pre_cap": np.array([120.0, 120.0]),
+            "primary_available_to_refining": np.array([100.0, 100.0]),
+            "secondary_feed_gap_proxy": np.array([40.0, 40.0]),
+            "secondary_feed_surplus_proxy": np.array([0.0, 0.0]),
+            "upstream_concentrate_gap_refined_equiv_proxy": np.array([10.0, 10.0]),
+            "upstream_concentrate_surplus_refined_equiv_proxy": np.array([0.0, 0.0]),
+        }
+    }
+    shocks = {
+        "EU27": {
+            "trade_refined_import_need_multiplier": {
+                "start_year": 2000,
+                "duration_years": 2,
+                "multiplier": 2.0,
+            }
+        }
+    }
+    out = build_endogenous_trade_constraints(
+        years=years,
+        material="tin",
+        regions=["EU27"],
+        commodities=["refined_metal"],
+        mfa_diagnostics_by_region=diag,
+        shocks_by_region=shocks,
+        concentrate_to_refined_coeff=1.0,
+        scrap_to_secondary_coeff=1.0,
+    )
+    assert not out.empty
+    need = out["import_need_kt"].to_numpy(dtype=float)
+    # Base need is 20 kt, doubled by refined-need multiplier shock.
+    assert np.allclose(need, np.array([40.0, 40.0]))

@@ -33,10 +33,8 @@ from crm_model.data import (
     load_end_use_shares,
     load_final_demand,
     load_lifetime_distributions,
-    load_primary_refined_net_imports,
     load_primary_refined_output,
     load_remanufacturing_end_use_eligibility,
-    primary_refined_net_imports_tr,
     primary_refined_output_tr,
     remanufacturing_eligibility_tre,
 )
@@ -47,7 +45,6 @@ from crm_model.sd.params import (
     normalize_and_validate_sd_parameters,
 )
 from crm_model.scenarios import (
-    apply_primary_refined_net_imports_shock,
     apply_routing_rate_shocks,
     deep_update,
     resolve_routing_rates,
@@ -132,11 +129,6 @@ def _collect_stock_rows(
     demand_df = load_final_demand(_resolve_exogenous_path(repo_root, vars_["final_demand"].path))
     shares_df = load_end_use_shares(_resolve_exogenous_path(repo_root, vars_["end_use_shares"].path))
     prod_df = load_primary_refined_output(_resolve_exogenous_path(repo_root, vars_["primary_refined_output"].path))
-    net_imp_df = (
-        load_primary_refined_net_imports(_resolve_exogenous_path(repo_root, vars_["primary_refined_net_imports"].path))
-        if "primary_refined_net_imports" in vars_
-        else None
-    )
     routing_rates_df = (
         load_collection_routing_rates(_resolve_exogenous_path(repo_root, vars_["collection_routing_rates"].path))
         if "collection_routing_rates" in vars_
@@ -203,23 +195,11 @@ def _collect_stock_rows(
                 lifetime_multiplier=lt_mult,
             )
             cap_tr = primary_refined_output_tr(prod_df, years=years, material=material, regions=[region])
-            if net_imp_df is not None:
-                net_imp_tr = primary_refined_net_imports_tr(
-                    net_imp_df, years=years, material=material, regions=[region]
-                )
-            else:
-                net_imp_tr = np.zeros_like(cap_tr)
-            net_imp_tr = apply_primary_refined_net_imports_shock(
-                primary_refined_net_imports_tr=net_imp_tr,
-                years=years,
-                shocks=shocks,
-            )
-            primary_available = np.maximum(cap_tr + net_imp_tr, 0.0)
+            primary_available = np.maximum(cap_tr, 0.0)
 
             mfa_params_it = dict(mfa_params)
             mfa_params_it["lifetime_pdf_trea"] = lt_pdf
             mfa_params_it["primary_available_to_refining"] = primary_available
-            mfa_params_it["primary_refined_net_imports"] = net_imp_tr
             if reman_eligibility_df is not None:
                 mfa_params_it["remanufacturing_end_use_eligibility_tre"] = remanufacturing_eligibility_tre(
                     reman_eligibility_df,

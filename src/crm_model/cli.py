@@ -34,7 +34,6 @@ from crm_model.data import (
     load_final_demand,
     load_lifetime_distributions,
     load_material_intensity,
-    load_primary_refined_net_imports,
     load_primary_refined_output,
     load_remanufacturing_end_use_eligibility,
     load_service_activity,
@@ -45,7 +44,6 @@ from crm_model.data import (
     load_trade_od_observed,
     load_trade_od_weights,
     material_intensity_t,
-    primary_refined_net_imports_tr,
     primary_refined_output_tr,
     remanufacturing_eligibility_tre,
     service_activity_t,
@@ -62,7 +60,6 @@ from crm_model.sd.params import (
 from crm_model.data.validate import validate_exogenous_inputs
 from crm_model.scenarios import (
     apply_series_shock,
-    apply_primary_refined_net_imports_shock,
     apply_routing_rate_shocks,
     deep_update,
     inject_gate_baselines,
@@ -74,7 +71,14 @@ from crm_model.scenario_profiles import (
     build_variant_payload_from_profiles,
     load_reporting_profile_csv,
 )
-from crm_model.trade import run_trade_od_allocator, validate_trade_od_sources
+from crm_model.trade import (
+    build_endogenous_trade_constraints,
+    compute_net_trade_imports_by_commodity_region,
+    prepare_trade_weights_for_runtime,
+    run_trade_od_allocator,
+    validate_trade_od_runtime_weights,
+    validate_trade_od_sources,
+)
 from crm_model.utils import archive_old_timestamped_runs, scenario_variant_root
 
 
@@ -909,14 +913,6 @@ def run_one_variant(
             load_primary_refined_output,
         )
 
-    refined_net_imp_df = None
-    refined_net_imp_sig = None
-    if "primary_refined_net_imports" in vars_:
-        refined_net_imp_df, refined_net_imp_sig = _load_table_cached(
-            _resolve_exogenous_path(repo_root, vars_["primary_refined_net_imports"].path),
-            load_primary_refined_net_imports,
-        )
-
     stage_df = None
     stage_sig = None
     if "stage_yields_losses" in vars_:
@@ -950,9 +946,16 @@ def run_one_variant(
             stock_df, stock_sig = _load_table_cached(stock_path, load_stock_in_use)
 
     trade_od_cfg = cfg.trade_od
+    trade_phase_active = str(phase) in {str(p) for p in getattr(trade_od_cfg, "activation_phases", [])}
+    trade_runtime_endogenous = (
+        bool(getattr(trade_od_cfg, "enabled", False))
+        and trade_phase_active
+        and str(getattr(trade_od_cfg, "runtime_mode", "legacy_sidecar")) == "endogenous"
+    )
     trade_od_observed_df = None
     trade_od_weights_df = None
     trade_od_constraints_df = None
+    trade_od_runtime_weights_df = None
     supplier_governance_risk_df = None
     if "supplier_governance_risk" in vars_:
         supplier_risk_path = _resolve_exogenous_path(repo_root, vars_["supplier_governance_risk"].path)
@@ -961,42 +964,54 @@ def run_one_variant(
                 supplier_risk_path, load_supplier_governance_risk
             )
     if bool(getattr(trade_od_cfg, "enabled", False)):
-        for source_name in [
-            trade_od_cfg.observed_flow_source,
-            trade_od_cfg.weights_source,
-            trade_od_cfg.constraints_source,
-        ]:
-            if source_name not in vars_:
-                raise ValueError(
-                    f"trade_od enabled but variable '{source_name}' is missing in registry/variable_registry.yml."
-                )
-        trade_od_observed_path = _resolve_exogenous_path(
-            repo_root, vars_[trade_od_cfg.observed_flow_source].path
-        )
+        if trade_od_cfg.weights_source not in vars_:
+            raise ValueError(
+                f"trade_od enabled but variable '{trade_od_cfg.weights_source}' is missing in registry/variable_registry.yml."
+            )
         trade_od_weights_path = _resolve_exogenous_path(
             repo_root, vars_[trade_od_cfg.weights_source].path
         )
-        trade_od_constraints_path = _resolve_exogenous_path(
-            repo_root, vars_[trade_od_cfg.constraints_source].path
-        )
-        if not trade_od_observed_path.exists():
-            raise FileNotFoundError(f"trade_od observed source missing: {trade_od_observed_path}")
         if not trade_od_weights_path.exists():
             raise FileNotFoundError(f"trade_od weights source missing: {trade_od_weights_path}")
-        if not trade_od_constraints_path.exists():
-            raise FileNotFoundError(f"trade_od constraints source missing: {trade_od_constraints_path}")
-
-        trade_od_observed_df, _ = _load_table_cached(trade_od_observed_path, load_trade_od_observed)
         trade_od_weights_df, _ = _load_table_cached(trade_od_weights_path, load_trade_od_weights)
-        trade_od_constraints_df, _ = _load_table_cached(trade_od_constraints_path, load_trade_od_constraints)
-        validate_trade_od_sources(
-            observed_flows=trade_od_observed_df,
+        validate_trade_od_runtime_weights(
             weights=trade_od_weights_df,
-            constraints=trade_od_constraints_df,
             materials=[m.name for m in dims.materials],
             regions=dims.regions,
             commodities=trade_od_cfg.commodities,
         )
+        trade_od_runtime_weights_df = prepare_trade_weights_for_runtime(
+            weights=trade_od_weights_df,
+            years=years,
+            materials=[m.name for m in dims.materials],
+            regions=dims.regions,
+            commodities=trade_od_cfg.commodities,
+            policy=str(getattr(trade_od_cfg, "weight_extrapolation_policy", "clamp_normalize")),
+        )
+        obs_src = getattr(trade_od_cfg, "observed_flow_source", None)
+        con_src = getattr(trade_od_cfg, "constraints_source", None)
+        if obs_src and obs_src in vars_:
+            obs_path = _resolve_exogenous_path(repo_root, vars_[obs_src].path)
+            if obs_path.exists():
+                trade_od_observed_df, _ = _load_table_cached(obs_path, load_trade_od_observed)
+        if con_src and con_src in vars_:
+            con_path = _resolve_exogenous_path(repo_root, vars_[con_src].path)
+            if con_path.exists():
+                trade_od_constraints_df, _ = _load_table_cached(con_path, load_trade_od_constraints)
+        if (
+            not trade_runtime_endogenous
+            and trade_od_observed_df is not None
+            and trade_od_weights_df is not None
+            and trade_od_constraints_df is not None
+        ):
+            validate_trade_od_sources(
+                observed_flows=trade_od_observed_df,
+                weights=trade_od_weights_df,
+                constraints=trade_od_constraints_df,
+                materials=[m.name for m in dims.materials],
+                regions=dims.regions,
+                commodities=trade_od_cfg.commodities,
+            )
 
     years_key = tuple(int(y) for y in years)
     calibration_years_key = tuple(int(y) for y in time.calibration_years)
@@ -1008,6 +1023,753 @@ def run_one_variant(
     coupling_trace_rows: List[Dict[str, Any]] = []
     coupling_convergence_rows: List[Dict[str, Any]] = []
     sd_capacity_by_material_region: Dict[Tuple[str, str], np.ndarray] = {}
+
+    if trade_runtime_endogenous:
+        if trade_od_runtime_weights_df is None:
+            raise ValueError("trade_od runtime weights are required when trade_od.runtime_mode='endogenous'.")
+        materials_order = [m.name for m in dims.materials]
+        regions_order = list(dims.regions)
+        commodities_order = list(trade_od_cfg.commodities)
+        trade_state_by_slice: Dict[Tuple[str, str, str], np.ndarray] = {}
+        for material_name in materials_order:
+            for region_name in regions_order:
+                for commodity_name in commodities_order:
+                    trade_state_by_slice[(material_name, region_name, commodity_name)] = np.zeros(
+                        len(years), dtype=float
+                    )
+
+        outer_trade_rows: List[Dict[str, Any]] = []
+        final_trade_out = None
+        final_trade_constraints = pd.DataFrame()
+        final_sd_capacity_by_material_region: Dict[Tuple[str, str], np.ndarray] = {}
+        converged_outer = False
+
+        for outer_idx in range(int(trade_od_cfg.outer_trade_max_iter)):
+            iter_ts_rows: List[Dict[str, Any]] = []
+            iter_scalar_rows: List[Dict[str, Any]] = []
+            iter_summary_rows: List[Dict[str, Any]] = []
+            iter_coupling_trace_rows: List[Dict[str, Any]] = []
+            iter_coupling_convergence_rows: List[Dict[str, Any]] = []
+            iter_sd_capacity_by_material_region: Dict[Tuple[str, str], np.ndarray] = {}
+            mfa_diag_by_slice: Dict[Tuple[str, str], Dict[str, np.ndarray]] = {}
+            shocks_by_slice: Dict[Tuple[str, str], Dict[str, Any]] = {}
+
+            for mat in dims.materials:
+                material = mat.name
+                for region in dims.regions:
+                    variant_slice = resolve_variant_slice_overrides(
+                        cfg=cfg,
+                        variant_name=variant_name,
+                        material=material,
+                        region=region,
+                    )
+                    variant_slice = _apply_profile_payload_to_slice(
+                        base_slice=variant_slice,
+                        profile_payload=profile_payload,
+                        material=material,
+                        region=region,
+                    )
+                    variant_slice = _resolve_exogenous_ramps_for_variant_slice(
+                        variant_slice=variant_slice,
+                        repo_root=repo_root,
+                        variant_name=variant_name,
+                        material=material,
+                        region=region,
+                    )
+                    sd_params = resolve_sd_parameters_for_slice(
+                        sd_base=sd_base,
+                        sd_heterogeneity=cfg.sd_heterogeneity,
+                        material=material,
+                        region=region,
+                    )
+                    variant_slice = _enforce_reporting_phase_for_variant_slice(
+                        variant_slice=variant_slice,
+                        years=years,
+                        report_start_year=int(time.report_start_year),
+                        sd_base=sd_params,
+                        mfa_base=mfa_base,
+                        strategy_base=strategy_base,
+                        transition_policy_base=transition_policy_base,
+                        demand_transformation_base=demand_transformation_base,
+                        shocks_base=shocks_base,
+                    )
+                    mfa_overrides = inject_gate_baselines(
+                        overrides=variant_slice["mfa_parameters"],
+                        primary_base=mfa_base,
+                    )
+                    strategy_overrides = inject_gate_baselines(
+                        overrides=variant_slice["strategy"],
+                        primary_base=strategy_base,
+                        secondary_base=mfa_base,
+                    )
+                    transition_policy_overrides = inject_gate_baselines(
+                        overrides=variant_slice["transition_policy"],
+                        primary_base=transition_policy_base,
+                    )
+                    demand_transformation_overrides = inject_gate_baselines(
+                        overrides=variant_slice["demand_transformation"],
+                        primary_base=demand_transformation_base,
+                    )
+                    sd_overrides = inject_gate_baselines(
+                        overrides=variant_slice["sd_parameters"],
+                        primary_base=sd_params,
+                    )
+                    sd_params = deep_update(sd_params, sd_overrides)
+                    mfa_params = deep_update(mfa_base, mfa_overrides)
+                    strategy = deep_update(strategy_base, strategy_overrides)
+                    transition_policy = deep_update(transition_policy_base, transition_policy_overrides)
+                    demand_transformation = deep_update(
+                        demand_transformation_base,
+                        demand_transformation_overrides,
+                    )
+                    shocks = deep_update(shocks_base, variant_slice["shocks"])
+                    sd_params, strategy = migrate_legacy_strategy_sd_controls(
+                        sd_parameters=sd_params,
+                        strategy=strategy,
+                        emit_warnings=True,
+                        context=f"variant '{variant_name}'",
+                    )
+                    sd_params = normalize_and_validate_sd_parameters(
+                        sd_params,
+                        years=years,
+                        report_start_year=time.report_start_year,
+                        emit_warnings=True,
+                        context=f"variant '{variant_name}' sd_parameters",
+                    )
+                    sd_params["report_start_year"] = time.report_start_year
+                    sd_params["report_years"] = report_years
+                    transition_adoption = _build_transition_adoption_series(
+                        years=years,
+                        transition_policy=transition_policy,
+                    )
+                    warm_key = (
+                        "coupling_warm_start",
+                        phase,
+                        variant_name,
+                        years_key,
+                        material,
+                        region,
+                    )
+                    with _CACHE_LOCK:
+                        warm_signals = _COUPLING_WARM_START.get(warm_key)
+                    if warm_signals is not None:
+                        sd_params.setdefault("service_stress_signal", float(warm_signals[0]))
+                        sd_params.setdefault("circular_supply_stress_signal", float(warm_signals[1]))
+                        if len(warm_signals) > 2:
+                            sd_params.setdefault("strategic_stock_coverage_years", float(warm_signals[2]))
+
+                    fd_t_raw = _cached_array(
+                        ("final_demand_t", demand_sig, years_key, material, region),
+                        lambda: final_demand_t(demand_df, years=years, material=material, region=region),
+                    )
+                    sh_te = _cached_array(
+                        ("end_use_shares_te", shares_sig, years_key, material, region, end_uses_key),
+                        lambda: end_use_shares_te(
+                            shares_df,
+                            years=years,
+                            material=material,
+                            region=region,
+                            end_uses=dims.end_uses,
+                        ),
+                    )
+                    service_activity_series = None
+                    material_intensity_series = None
+                    service_activity_source = str(
+                        demand_transformation.get("service_activity_source", "service_activity")
+                    ).strip()
+                    material_intensity_source = str(
+                        demand_transformation.get("material_intensity_source", "material_intensity")
+                    ).strip()
+                    if service_activity_source in optional_demand_drivers:
+                        service_df, service_sig = optional_demand_drivers[service_activity_source]
+                        service_activity_series = _cached_array(
+                            ("service_activity_t", service_sig, years_key, material, region, service_activity_source),
+                            lambda: service_activity_t(
+                                service_df,
+                                years=years,
+                                material=material,
+                                region=region,
+                            ),
+                        )
+                    if material_intensity_source in optional_demand_drivers:
+                        intensity_df, intensity_sig = optional_demand_drivers[material_intensity_source]
+                        material_intensity_series = _cached_array(
+                            (
+                                "material_intensity_t",
+                                intensity_sig,
+                                years_key,
+                                material,
+                                region,
+                                material_intensity_source,
+                            ),
+                            lambda: material_intensity_t(
+                                intensity_df,
+                                years=years,
+                                material=material,
+                                region=region,
+                            ),
+                        )
+
+                    fd_t, demand_transform_multiplier = _apply_demand_transformation(
+                        base_demand=fd_t_raw,
+                        years=years,
+                        demand_transformation=demand_transformation,
+                        service_activity=service_activity_series,
+                        material_intensity=material_intensity_series,
+                        transition_adoption=transition_adoption,
+                        transition_policy=transition_policy,
+                        report_start_year=time.report_start_year,
+                    )
+
+                    lt_mult = _temporal_series(
+                        strategy.get("lifetime_multiplier", 1.0),
+                        years=years,
+                        name="strategy.lifetime_multiplier",
+                        default=1.0,
+                        report_start_year=time.report_start_year,
+                    )
+                    lt_pdf = lifetime_pdf_trea_flodym_adapter(
+                        lt_df,
+                        years=years,
+                        material=material,
+                        regions=[region],
+                        end_uses=dims.end_uses,
+                        lifetime_multiplier=lt_mult,
+                    )
+
+                    if refined_output_df is not None:
+                        refined_output_tr = _cached_array(
+                            ("primary_refined_output_tr", refined_output_sig, years_key, material, region),
+                            lambda: primary_refined_output_tr(
+                                refined_output_df,
+                                years=years,
+                                material=material,
+                                regions=[region],
+                            ),
+                        )
+                    else:
+                        raise ValueError(
+                            "Missing required exogenous input for primary refined output: "
+                            "primary_refined_output."
+                        )
+
+                    refined_output_tr = apply_series_shock(
+                        series_tr=refined_output_tr,
+                        years=years,
+                        shocks=shocks,
+                        shock_name="primary_refined_output",
+                    )
+                    trade_refined_tr = trade_state_by_slice[(material, region, "refined_metal")][:, None]
+                    trade_concentrate_tr = trade_state_by_slice[(material, region, "concentrates")][:, None]
+                    trade_scrap_tr = trade_state_by_slice[(material, region, "scrap")][:, None]
+                    primary_available_tr = np.maximum(
+                        refined_output_tr
+                        + trade_refined_tr
+                        + (trade_concentrate_tr * float(trade_od_cfg.concentrate_to_refined_coeff)),
+                        0.0,
+                    )
+
+                    stage_params = {
+                        "extraction_yield": np.ones(len(years), dtype=float),
+                        "beneficiation_yield": np.ones(len(years), dtype=float),
+                        "refining_yield": np.ones(len(years), dtype=float),
+                        "sorting_yield": np.ones(len(years), dtype=float),
+                        "extraction_loss_to_sysenv_share": np.ones(len(years), dtype=float),
+                        "beneficiation_loss_to_sysenv_share": np.ones(len(years), dtype=float),
+                        "refining_loss_to_sysenv_share": np.ones(len(years), dtype=float),
+                        "sorting_reject_to_disposal_share": np.ones(len(years), dtype=float),
+                        "sorting_reject_to_sysenv_share": np.zeros(len(years), dtype=float),
+                    }
+                    if stage_df is not None:
+                        stage_map = _cached_array(
+                            ("stage_yields_losses_t", stage_sig, years_key, material, region),
+                            lambda: stage_yields_losses_t(
+                                stage_df,
+                                years=years,
+                                material=material,
+                                region=region,
+                            ),
+                        )
+                        stage_params = {k: np.array(v, dtype=float).copy() for k, v in stage_map.items()}
+
+                    for key in ["extraction_yield", "beneficiation_yield", "refining_yield", "sorting_yield"]:
+                        stage_params[key] = np.clip(
+                            apply_series_shock(
+                                series_tr=stage_params[key][:, None],
+                                years=years,
+                                shocks=shocks,
+                                shock_name=key,
+                            )[:, 0],
+                            0.0,
+                            1.0,
+                        )
+
+                    mfa_params_it = dict(mfa_params)
+                    mfa_params_it["lifetime_pdf_trea"] = lt_pdf
+                    mfa_params_it["primary_available_to_refining"] = primary_available_tr
+                    mfa_params_it["primary_refined_output"] = refined_output_tr
+                    mfa_params_it["trade_refined_net_imports_tr"] = trade_refined_tr
+                    mfa_params_it["trade_concentrate_net_imports_tr"] = trade_concentrate_tr
+                    mfa_params_it["trade_scrap_net_imports_tr"] = trade_scrap_tr
+                    mfa_params_it["concentrate_to_refined_coeff"] = float(
+                        trade_od_cfg.concentrate_to_refined_coeff
+                    )
+                    mfa_params_it["scrap_to_secondary_coeff"] = float(trade_od_cfg.scrap_to_secondary_coeff)
+                    for k, v in stage_params.items():
+                        mfa_params_it[k] = v
+                    if reman_eligibility_df is not None:
+                        mfa_params_it["remanufacturing_end_use_eligibility_tre"] = _cached_array(
+                            ("remanufacturing_eligibility_tre", reman_eligibility_sig, years_key, region, end_uses_key),
+                            lambda: remanufacturing_eligibility_tre(
+                                reman_eligibility_df,
+                                years=years,
+                                regions=[region],
+                                end_uses=dims.end_uses,
+                            ),
+                        )
+                    strategy_it = dict(strategy)
+                    if routing_rates_df is not None:
+                        routing_arr = _cached_array(
+                            ("collection_routing_rates_t", routing_sig, years_key, material, region),
+                            lambda: np.stack(
+                                collection_routing_rates_t(
+                                    routing_rates_df,
+                                    years=years,
+                                    material=material,
+                                    region=region,
+                                ),
+                                axis=0,
+                            ),
+                        )
+                        rec_t, rem_t, disp_t = routing_arr[0], routing_arr[1], routing_arr[2]
+                        if any(
+                            k in strategy_it
+                            for k in [
+                                "recycling_rate",
+                                "remanufacturing_rate",
+                                "remanufacture_share",
+                                "disposal_rate",
+                            ]
+                        ):
+                            rec_t, rem_t, disp_t = resolve_routing_rates(
+                                years=years,
+                                strategy=strategy_it,
+                                params={
+                                    "recycling_rate": rec_t,
+                                    "remanufacturing_rate": rem_t,
+                                    "disposal_rate": disp_t,
+                                },
+                            )
+                    else:
+                        rec_t, rem_t, disp_t = resolve_routing_rates(
+                            years=years,
+                            strategy=strategy_it,
+                            params=mfa_params_it,
+                        )
+
+                    rec_t, rem_t, disp_t = apply_routing_rate_shocks(
+                        recycling_rate=rec_t,
+                        remanufacturing_rate=rem_t,
+                        disposal_rate=disp_t,
+                        years=years,
+                        shocks=shocks,
+                    )
+                    strategy_it["recycling_rate"] = rec_t
+                    strategy_it["remanufacturing_rate"] = rem_t
+                    strategy_it["disposal_rate"] = disp_t
+
+                    sd_params, mfa_params_it, strategy_it = _apply_transition_policy_adjustments(
+                        years=years,
+                        transition_policy=transition_policy,
+                        transition_adoption=transition_adoption,
+                        sd_params=sd_params,
+                        mfa_params=mfa_params_it,
+                        strategy=strategy_it,
+                        report_start_year=time.report_start_year,
+                    )
+
+                    res = run_loose_coupled(
+                        years=years,
+                        material=material,
+                        region=region,
+                        end_uses=dims.end_uses,
+                        final_demand_t=fd_t,
+                        end_use_shares_te=sh_te,
+                        sd_params=sd_params,
+                        mfa_params=mfa_params_it,
+                        mfa_graph=mfa_graph_payload,
+                        strategy=strategy_it,
+                        shocks=shocks,
+                        coupling=coupling_payload,
+                        service_level_threshold=service_level_threshold,
+                    )
+
+                    iter_sd_capacity_by_material_region[(material, region)] = (
+                        res.sd.capacity_envelope.reindex(years).to_numpy(dtype=float)
+                    )
+                    final_service_signal = float(res.meta.get("final_service_stress_signal", np.nan))
+                    final_circular_signal = float(res.meta.get("final_circular_supply_stress_signal", np.nan))
+                    final_strategic_signal = float(res.meta.get("final_strategic_stock_coverage_signal", np.nan))
+                    if (
+                        np.isfinite(final_service_signal)
+                        and np.isfinite(final_circular_signal)
+                        and np.isfinite(final_strategic_signal)
+                    ):
+                        with _CACHE_LOCK:
+                            _COUPLING_WARM_START[warm_key] = (
+                                final_service_signal,
+                                final_circular_signal,
+                                final_strategic_signal,
+                            )
+
+                    def _series_to_year_array(name: str) -> np.ndarray:
+                        s = res.indicators_ts.get(name)
+                        if s is None:
+                            return np.zeros(len(years), dtype=float)
+                        return s.reindex(years).fillna(0.0).to_numpy(dtype=float)
+
+                    mfa_diag_by_slice[(material, region)] = {
+                        "primary_available_to_refining": _series_to_year_array("Primary_available_to_refining"),
+                        "refined_input_required_pre_cap": _series_to_year_array("Refined_input_required_pre_cap"),
+                        "secondary_feed_gap_proxy": _series_to_year_array("Secondary_feed_gap_proxy"),
+                        "secondary_feed_surplus_proxy": _series_to_year_array("Secondary_feed_surplus_proxy"),
+                        "upstream_concentrate_gap_refined_equiv_proxy": _series_to_year_array(
+                            "Upstream_concentrate_gap_refined_equiv_proxy"
+                        ),
+                        "upstream_concentrate_surplus_refined_equiv_proxy": _series_to_year_array(
+                            "Upstream_concentrate_surplus_refined_equiv_proxy"
+                        ),
+                    }
+                    shocks_by_slice[(material, region)] = dict(shocks)
+
+                    keep_years = years if phase in {"calibration"} else report_years
+                    for ind_name, series in res.indicators_ts.items():
+                        if ind_name not in allowed_ts:
+                            continue
+                        s = series.loc[[y for y in keep_years if y in series.index]]
+                        for y, v in s.items():
+                            iter_ts_rows.append(
+                                {
+                                    "phase": phase,
+                                    "variant": variant_name,
+                                    "material": material,
+                                    "region": region,
+                                    "year": int(y),
+                                    "indicator": ind_name,
+                                    "value": float(v),
+                                }
+                            )
+
+                    if collect_scalar:
+                        for met_name, v in res.indicators_scalar.items():
+                            iter_scalar_rows.append(
+                                {
+                                    "phase": phase,
+                                    "variant": variant_name,
+                                    "material": material,
+                                    "region": region,
+                                    "metric": met_name,
+                                    "value": float(v),
+                                }
+                            )
+
+                    if collect_coupling_debug:
+                        if not res.coupling_signals_iter_year.empty:
+                            trace = res.coupling_signals_iter_year.copy()
+                            trace["phase"] = phase
+                            trace["variant"] = variant_name
+                            trace["material"] = material
+                            trace["region"] = region
+                            iter_coupling_trace_rows.extend(trace.to_dict(orient="records"))
+                        if not res.coupling_convergence_iter.empty:
+                            conv = res.coupling_convergence_iter.copy()
+                            conv["phase"] = phase
+                            conv["variant"] = variant_name
+                            conv["material"] = material
+                            conv["region"] = region
+                            iter_coupling_convergence_rows.extend(conv.to_dict(orient="records"))
+
+                    stock_rmse = np.nan
+                    if stock_df is not None and (collect_scalar or collect_summary):
+                        obs = _cached_array(
+                            (
+                                "stock_in_use_t",
+                                stock_sig,
+                                calibration_years_key,
+                                material,
+                                region,
+                                end_uses_key,
+                            ),
+                            lambda: stock_in_use_t(
+                                stock_df,
+                                years=time.calibration_years,
+                                material=material,
+                                region=region,
+                                end_uses=dims.end_uses,
+                            ),
+                        )
+                        mod = res.mfa.stock_in_use.loc[time.calibration_years].to_numpy(dtype=float)
+                        mask = ~np.isnan(obs)
+                        if mask.any():
+                            stock_rmse = float(np.sqrt(np.mean((mod[mask] - obs[mask]) ** 2)))
+                            if collect_scalar:
+                                iter_scalar_rows.append(
+                                    {
+                                        "phase": phase,
+                                        "variant": variant_name,
+                                        "material": material,
+                                        "region": region,
+                                        "metric": "Stock_RMSE_calibration",
+                                        "value": stock_rmse,
+                                    }
+                                )
+
+                    if collect_summary:
+                        iter_summary_rows.append(
+                            {
+                                "variant": variant_name,
+                                "phase": phase,
+                                "material": material,
+                                "region": region,
+                                "iterations": int(res.meta.get("iterations", 0)),
+                                "final_service_stress_signal": float(
+                                    res.meta.get("final_service_stress_signal", np.nan)
+                                ),
+                                "final_circular_supply_stress_signal": float(
+                                    res.meta.get("final_circular_supply_stress_signal", np.nan)
+                                ),
+                                "final_strategic_stock_coverage_signal": float(
+                                    res.meta.get("final_strategic_stock_coverage_signal", np.nan)
+                                ),
+                                "final_stress_multiplier": float(res.meta.get("final_stress_multiplier", np.nan)),
+                                "final_collection_multiplier_mean": float(
+                                    res.meta.get("final_collection_multiplier_mean", np.nan)
+                                ),
+                                "final_collection_rate_mean": float(
+                                    res.meta.get("final_collection_rate_mean", np.nan)
+                                ),
+                                "final_scarcity_multiplier_effective_mean": float(
+                                    res.meta.get("final_scarcity_multiplier_effective_mean", np.nan)
+                                ),
+                                "final_capacity_envelope_mean": float(
+                                    res.meta.get("final_capacity_envelope_mean", np.nan)
+                                ),
+                                "final_flow_utilization_mean": float(
+                                    res.meta.get("final_flow_utilization_mean", np.nan)
+                                ),
+                                "final_bottleneck_pressure_mean": float(
+                                    res.meta.get("final_bottleneck_pressure_mean", np.nan)
+                                ),
+                                "final_collection_bottleneck_throttle_mean": float(
+                                    res.meta.get("final_collection_bottleneck_throttle_mean", np.nan)
+                                ),
+                                "final_transition_adoption_mean": float(np.mean(transition_adoption)),
+                                "final_demand_transformation_multiplier_mean": float(
+                                    np.mean(demand_transform_multiplier)
+                                ),
+                                "final_strategic_fill_intent_mean": float(
+                                    res.meta.get("final_strategic_fill_intent_mean", np.nan)
+                                ),
+                                "final_strategic_release_intent_mean": float(
+                                    res.meta.get("final_strategic_release_intent_mean", np.nan)
+                                ),
+                                "coupling_converged": bool(res.meta.get("coupling_converged", False)),
+                                "coupling_convergence_metric": float(
+                                    res.meta.get("coupling_convergence_metric", np.nan)
+                                ),
+                                "coupling_tolerance": float(res.meta.get("coupling_tolerance", np.nan)),
+                                "stock_rmse_cal": stock_rmse,
+                            }
+                        )
+
+            constraints_frames: List[pd.DataFrame] = []
+            for material in materials_order:
+                material_diag = {
+                    region: mfa_diag_by_slice[(material, region)]
+                    for region in regions_order
+                    if (material, region) in mfa_diag_by_slice
+                }
+                material_shocks = {
+                    region: shocks_by_slice[(material, region)]
+                    for region in regions_order
+                    if (material, region) in shocks_by_slice
+                }
+                if not material_diag:
+                    continue
+                constraints_frames.append(
+                    build_endogenous_trade_constraints(
+                        years=years,
+                        material=material,
+                        regions=regions_order,
+                        commodities=commodities_order,
+                        mfa_diagnostics_by_region=material_diag,
+                        shocks_by_region=material_shocks,
+                        concentrate_to_refined_coeff=float(trade_od_cfg.concentrate_to_refined_coeff),
+                        scrap_to_secondary_coeff=float(trade_od_cfg.scrap_to_secondary_coeff),
+                    )
+                )
+            constraints_all = (
+                pd.concat(constraints_frames, ignore_index=True) if constraints_frames else pd.DataFrame()
+            )
+
+            if constraints_all.empty:
+                final_trade_out = None
+                final_trade_constraints = constraints_all
+                final_sd_capacity_by_material_region = iter_sd_capacity_by_material_region
+                ts_rows = iter_ts_rows
+                scalar_rows = iter_scalar_rows
+                summary_rows = iter_summary_rows
+                coupling_trace_rows = iter_coupling_trace_rows
+                coupling_convergence_rows = iter_coupling_convergence_rows
+                break
+
+            trade_out = run_trade_od_allocator(
+                years=years,
+                materials=materials_order,
+                regions=regions_order,
+                commodities=commodities_order,
+                observed_flows=trade_od_observed_df,
+                weights=trade_od_runtime_weights_df,
+                constraints=constraints_all,
+                sd_capacity_envelope_by_material_region=iter_sd_capacity_by_material_region,
+                supplier_governance_risk=supplier_governance_risk_df,
+                historical_window_start_year=int(trade_od_cfg.historical_window_start_year),
+                historical_window_end_year=int(trade_od_cfg.historical_window_end_year),
+                capacity_cap_hybrid_mode=str(trade_od_cfg.capacity_cap_hybrid_mode),
+                capacity_cap_sd_multiplier=float(trade_od_cfg.capacity_cap_sd_multiplier),
+                coupling_relax_lambda_0_1=float(trade_od_cfg.coupling_relax_lambda_0_1),
+                max_reallocation_passes=int(trade_od_cfg.allocator_max_reallocation_passes),
+            )
+
+            next_trade_state: Dict[Tuple[str, str, str], np.ndarray] = {}
+            max_delta = 0.0
+            for material in materials_order:
+                net_by_commodity = compute_net_trade_imports_by_commodity_region(
+                    imports_exports=trade_out.imports_exports,
+                    years=years,
+                    material=material,
+                    regions=regions_order,
+                    commodities=commodities_order,
+                )
+                for ci, commodity in enumerate(commodities_order):
+                    target_tr = np.array(net_by_commodity.get(commodity, np.zeros((len(years), len(regions_order)))), dtype=float)
+                    for ri, region in enumerate(regions_order):
+                        key = (material, region, commodity)
+                        prev = trade_state_by_slice[key]
+                        target = target_tr[:, ri]
+                        relaxed = (
+                            (1.0 - float(trade_od_cfg.coupling_relax_lambda_0_1)) * prev
+                            + float(trade_od_cfg.coupling_relax_lambda_0_1) * target
+                        )
+                        delta = float(np.max(np.abs(relaxed - prev)))
+                        if delta > max_delta:
+                            max_delta = delta
+                        next_trade_state[key] = relaxed
+
+            converged_outer = max_delta <= float(trade_od_cfg.outer_trade_convergence_tol)
+            outer_trade_rows.append(
+                {
+                    "phase": phase,
+                    "variant": variant_name,
+                    "outer_iteration": int(outer_idx + 1),
+                    "outer_trade_max_abs_delta_kt": float(max_delta),
+                    "outer_trade_convergence_tol": float(trade_od_cfg.outer_trade_convergence_tol),
+                    "outer_trade_converged": bool(converged_outer),
+                }
+            )
+
+            ts_rows = iter_ts_rows
+            scalar_rows = iter_scalar_rows
+            summary_rows = iter_summary_rows
+            coupling_trace_rows = iter_coupling_trace_rows
+            coupling_convergence_rows = iter_coupling_convergence_rows
+            final_trade_out = trade_out
+            final_trade_constraints = constraints_all
+            final_sd_capacity_by_material_region = iter_sd_capacity_by_material_region
+            trade_state_by_slice = next_trade_state
+            if converged_outer:
+                break
+
+        trade_artifacts = {
+            "trade_od_flows": pd.DataFrame(),
+            "trade_od_supplier_shares": pd.DataFrame(),
+            "trade_od_supplier_diversification": pd.DataFrame(),
+            "trade_od_allocator_diagnostics": pd.DataFrame(),
+            "trade_od_imports_exports": pd.DataFrame(),
+            "trade_od_outer_loop_convergence": pd.DataFrame(outer_trade_rows),
+            "trade_od_constraints_endogenous": final_trade_constraints.copy(),
+            "sd_capacity_envelope_by_slice": pd.DataFrame(),
+        }
+        cap_rows: List[Dict[str, Any]] = []
+        for (material, region), arr in final_sd_capacity_by_material_region.items():
+            for y, v in zip(years, arr.tolist()):
+                cap_rows.append(
+                    {
+                        "year": int(y),
+                        "material": str(material),
+                        "region": str(region),
+                        "capacity_envelope": float(v),
+                    }
+                )
+        if cap_rows:
+            trade_artifacts["sd_capacity_envelope_by_slice"] = pd.DataFrame(cap_rows)
+
+        if final_trade_out is not None and not final_trade_out.flows.empty:
+            trade_artifacts["trade_od_flows"] = final_trade_out.flows.assign(phase=phase, variant=variant_name)
+            trade_artifacts["trade_od_supplier_shares"] = final_trade_out.supplier_shares.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            trade_artifacts["trade_od_supplier_diversification"] = final_trade_out.supplier_diversification.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            trade_artifacts["trade_od_allocator_diagnostics"] = final_trade_out.diagnostics.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            trade_artifacts["trade_od_imports_exports"] = final_trade_out.imports_exports.assign(
+                phase=phase,
+                variant=variant_name,
+            )
+            keep_years_trade = years if phase in {"calibration"} else report_years
+            div_keep = final_trade_out.supplier_diversification[
+                final_trade_out.supplier_diversification["year"].isin(set(keep_years_trade))
+            ].copy()
+            trade_indicator_cols = {
+                "supplier_hhi_0_1": "Supplier_HHI",
+                "supplier_diversification_0_1": "Supplier_Diversification",
+                "effective_supplier_count": "Supplier_Effective_suppliers",
+                "supplier_governance_risk_weighted_0_1": "Supplier_Governance_risk_weighted",
+            }
+            for col_name, ind_name in trade_indicator_cols.items():
+                if ind_name not in allowed_ts or col_name not in div_keep.columns:
+                    continue
+                sub = div_keep[["year", "material", "region", col_name]].copy()
+                sub = sub[sub[col_name].notna()]
+                for row in sub.itertuples(index=False):
+                    ts_rows.append(
+                        {
+                            "phase": phase,
+                            "variant": variant_name,
+                            "material": str(row.material),
+                            "region": str(row.region),
+                            "year": int(row.year),
+                            "indicator": ind_name,
+                            "value": float(getattr(row, col_name)),
+                        }
+                    )
+
+        with _CACHE_LOCK:
+            _LAST_TRADE_OD_ARTIFACTS[(phase, variant_name)] = trade_artifacts
+
+        return (
+            pd.DataFrame(ts_rows),
+            pd.DataFrame(scalar_rows),
+            pd.DataFrame(summary_rows),
+            pd.DataFrame(coupling_trace_rows),
+            pd.DataFrame(coupling_convergence_rows),
+        )
 
     for mat in dims.materials:
         material = mat.name
@@ -1198,37 +1960,13 @@ def run_one_variant(
                     "primary_refined_output."
                 )
 
-            if refined_net_imp_df is not None:
-                refined_net_imp_tr = _cached_array(
-                    ("primary_refined_net_imports_tr", refined_net_imp_sig, years_key, material, region),
-                    lambda: primary_refined_net_imports_tr(
-                        refined_net_imp_df,
-                        years=years,
-                        material=material,
-                        regions=[region],
-                    ),
-                )
-            else:
-                refined_net_imp_tr = np.zeros_like(refined_output_tr, dtype=float)
-
             refined_output_tr = apply_series_shock(
                 series_tr=refined_output_tr,
                 years=years,
                 shocks=shocks,
                 shock_name="primary_refined_output",
             )
-            refined_net_imp_tr = apply_series_shock(
-                series_tr=refined_net_imp_tr,
-                years=years,
-                shocks=shocks,
-                shock_name="primary_refined_net_imports",
-            )
-            refined_net_imp_tr = apply_primary_refined_net_imports_shock(
-                primary_refined_net_imports_tr=refined_net_imp_tr,
-                years=years,
-                shocks=shocks,
-            )
-            primary_available_tr = np.maximum(refined_output_tr + refined_net_imp_tr, 0.0)
+            primary_available_tr = np.maximum(refined_output_tr, 0.0)
 
             stage_params = {
                 "extraction_yield": np.ones(len(years), dtype=float),
@@ -1270,7 +2008,6 @@ def run_one_variant(
             mfa_params_it["lifetime_pdf_trea"] = lt_pdf
             mfa_params_it["primary_available_to_refining"] = primary_available_tr
             mfa_params_it["primary_refined_output"] = refined_output_tr
-            mfa_params_it["primary_refined_net_imports"] = refined_net_imp_tr
             for k, v in stage_params.items():
                 mfa_params_it[k] = v
             if reman_eligibility_df is not None:
@@ -1662,6 +2399,8 @@ def main() -> int:
     all_trade_diagnostics = []
     all_trade_imports_exports = []
     all_trade_capacity_envelope = []
+    all_trade_outer_convergence = []
+    all_trade_endogenous_constraints = []
 
     for ph in phases:
         ts_df, scalar_df, summary_df, coupling_trace_df, coupling_conv_df = run_one_variant(
@@ -1686,6 +2425,8 @@ def main() -> int:
         diag_df = trade_phase_payload.get("trade_od_allocator_diagnostics", pd.DataFrame())
         ie_df = trade_phase_payload.get("trade_od_imports_exports", pd.DataFrame())
         cap_df = trade_phase_payload.get("sd_capacity_envelope_by_slice", pd.DataFrame())
+        outer_df = trade_phase_payload.get("trade_od_outer_loop_convergence", pd.DataFrame())
+        con_endo_df = trade_phase_payload.get("trade_od_constraints_endogenous", pd.DataFrame())
         if not flows_df.empty:
             all_trade_flows.append(flows_df)
         if not shares_df.empty:
@@ -1698,6 +2439,10 @@ def main() -> int:
             all_trade_imports_exports.append(ie_df)
         if not cap_df.empty:
             all_trade_capacity_envelope.append(cap_df.assign(phase=ph, variant=args.variant))
+        if not outer_df.empty:
+            all_trade_outer_convergence.append(outer_df)
+        if not con_endo_df.empty:
+            all_trade_endogenous_constraints.append(con_endo_df.assign(phase=ph, variant=args.variant))
 
     ts = pd.concat(all_ts, ignore_index=True) if all_ts else pd.DataFrame()
     scalar = pd.concat(all_scalar, ignore_index=True) if all_scalar else pd.DataFrame()
@@ -1723,6 +2468,14 @@ def main() -> int:
     )
     trade_od_sd_capacity_envelope = (
         pd.concat(all_trade_capacity_envelope, ignore_index=True) if all_trade_capacity_envelope else pd.DataFrame()
+    )
+    trade_od_outer_loop_convergence = (
+        pd.concat(all_trade_outer_convergence, ignore_index=True) if all_trade_outer_convergence else pd.DataFrame()
+    )
+    trade_od_constraints_endogenous = (
+        pd.concat(all_trade_endogenous_constraints, ignore_index=True)
+        if all_trade_endogenous_constraints
+        else pd.DataFrame()
     )
 
     # Console summary
@@ -1830,6 +2583,10 @@ def main() -> int:
             trade_od_imports_exports.to_csv(ind_dir / "trade_od_imports_exports.csv", index=False)
         if not trade_od_sd_capacity_envelope.empty:
             trade_od_sd_capacity_envelope.to_csv(ind_dir / "trade_od_sd_capacity_envelope.csv", index=False)
+        if not trade_od_outer_loop_convergence.empty:
+            trade_od_outer_loop_convergence.to_csv(ind_dir / "trade_od_outer_loop_convergence.csv", index=False)
+        if not trade_od_constraints_endogenous.empty:
+            trade_od_constraints_endogenous.to_csv(ind_dir / "trade_od_constraints_endogenous.csv", index=False)
         summary.to_csv(run_dir / "summary.csv", index=False)
 
         moved = archive_old_timestamped_runs(scenario_root, keep_last=3)

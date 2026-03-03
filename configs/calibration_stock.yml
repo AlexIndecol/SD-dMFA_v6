@@ -45,11 +45,11 @@ parameters:
     collection_rate:
       path: mfa_parameters.collection_rate
       initial: 0.6447636037327168
-      bounds: [0.05, 0.95]
+      bounds: [0.05, 0.90]
     recycling_yield:
       path: mfa_parameters.recycling_yield
       initial: 0.6164764329098924
-      bounds: [0.40, 0.98]
+      bounds: [0.40, 0.90]
     reman_yield:
       path: strategy.reman_yield
       initial: 0.7168092328464711

@@ -2,6 +2,7 @@
 #
 # Section 1) Scope
 # - Optional trade-axis definitions for commodity/origin/destination dimensions.
+# - OD allocator controls are co-located under top-level key `trade_od`.
 #
 # Section 2) Required keys
 # - commodity_dimension, origin_region_dimension, destination_region_dimension
@@ -31,3 +32,59 @@ trade_aliases:
 commodities: []
 origin_regions: []
 destination_regions: []
+
+# Interface Contract: OD Trade Allocator Controls
+#
+# Section 1) Scope
+# - Incremental OD trade layer driven by exogenous observed matrices and
+#   constrained by empirical + SD-derived export ceilings.
+#
+# Section 2) Required keys
+# - enabled
+# - weights_source
+# - commodities
+# - runtime_mode, activation_phases
+# - outer_trade_max_iter, outer_trade_convergence_tol
+# - weight_extrapolation_policy
+# - allocator_max_reallocation_passes
+# - capacity_cap_hybrid_mode
+# - capacity_cap_sd_multiplier
+# - coupling_relax_lambda_0_1
+# - concentrate_to_refined_coeff, scrap_to_secondary_coeff
+#
+# Section 3) Allowed values and constraints
+# - fallback_mode_outside_window: legacy_net_import_balance
+# - capacity_cap_hybrid_mode: min_empirical_sd | empirical_only | sd_only
+# - coupling_relax_lambda_0_1 in [0,1]
+trade_od:
+  enabled: false
+
+  observed_flow_source: trade_od_observed
+  weights_source: trade_od_weights
+  constraints_source: trade_od_constraints
+  runtime_mode: endogenous
+  activation_phases: [calibration, reporting]
+  outer_trade_max_iter: 6
+  outer_trade_convergence_tol: 0.001
+  weight_extrapolation_policy: clamp_normalize
+
+  commodities:
+    - concentrates
+    - refined_metal
+    - scrap
+  concentrate_to_refined_coeff: 1.0
+  scrap_to_secondary_coeff: 1.0
+
+  historical_window_start_year: 1995
+  historical_window_end_year: 2024
+  fallback_mode_outside_window: legacy_net_import_balance
+
+  rolling_weight_window_years: 3
+  allocator_max_reallocation_passes: 1
+
+  capacity_cap_hybrid_mode: min_empirical_sd
+  capacity_cap_sd_multiplier: 1.2
+  capacity_cap_empirical_quantile: 0.75
+  capacity_cap_empirical_window_years: 5
+
+  coupling_relax_lambda_0_1: 0.50

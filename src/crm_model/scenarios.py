@@ -240,19 +240,6 @@ def resolve_sd_parameters_for_slice(
     return out
 
 
-def apply_primary_refined_net_imports_shock(
-    *,
-    primary_refined_net_imports_tr: np.ndarray,
-    years: Sequence[int],
-    shocks: Dict[str, Any],
-) -> np.ndarray:
-    event = _event_to_dict(shocks.get("primary_refined_net_imports"))
-    if event is None:
-        return primary_refined_net_imports_tr
-    mult = _shock_multiplier_series(years, event)
-    return np.array(primary_refined_net_imports_tr, dtype=float) * mult[:, None]
-
-
 def apply_series_shock(
     *,
     series_tr: np.ndarray,

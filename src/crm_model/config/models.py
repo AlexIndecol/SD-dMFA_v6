@@ -99,7 +99,10 @@ class ShocksConfig(BaseModel):
     demand_surge: Optional[ShockEvent] = None
     recycling_disruption: Optional[ShockEvent] = None
     primary_refined_output: Optional[ShockEvent] = None
-    primary_refined_net_imports: Optional[ShockEvent] = None
+    trade_refined_import_need_multiplier: Optional[ShockEvent] = None
+    trade_concentrate_import_need_multiplier: Optional[ShockEvent] = None
+    trade_scrap_import_need_multiplier: Optional[ShockEvent] = None
+    trade_export_capacity_multiplier: Optional[ShockEvent] = None
     extraction_yield: Optional[ShockEvent] = None
     beneficiation_yield: Optional[ShockEvent] = None
     refining_yield: Optional[ShockEvent] = None
@@ -243,12 +246,21 @@ class CouplingConfig(BaseModel):
 
 class TradeODConfig(BaseModel):
     enabled: bool = False
-    observed_flow_source: str = "trade_od_observed"
+    observed_flow_source: Optional[str] = "trade_od_observed"
     weights_source: str = "trade_od_weights"
-    constraints_source: str = "trade_od_constraints"
+    constraints_source: Optional[str] = "trade_od_constraints"
+    runtime_mode: Literal["endogenous", "legacy_sidecar"] = "endogenous"
+    activation_phases: List[Literal["calibration", "reporting"]] = Field(
+        default_factory=lambda: ["calibration", "reporting"]
+    )
+    outer_trade_max_iter: int = 6
+    outer_trade_convergence_tol: float = 1.0e-3
+    weight_extrapolation_policy: Literal["clamp_normalize"] = "clamp_normalize"
     commodities: List[str] = Field(
         default_factory=lambda: ["concentrates", "refined_metal", "scrap"]
     )
+    concentrate_to_refined_coeff: float = 1.0
+    scrap_to_secondary_coeff: float = 1.0
     historical_window_start_year: int = 1995
     historical_window_end_year: int = 2024
     fallback_mode_outside_window: Literal["legacy_net_import_balance"] = "legacy_net_import_balance"
@@ -262,12 +274,24 @@ class TradeODConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_trade_od(self) -> "TradeODConfig":
-        if not self.observed_flow_source.strip():
-            raise ValueError("trade_od.observed_flow_source must be non-empty.")
+        if self.observed_flow_source is not None and not self.observed_flow_source.strip():
+            raise ValueError("trade_od.observed_flow_source must be non-empty when provided.")
         if not self.weights_source.strip():
             raise ValueError("trade_od.weights_source must be non-empty.")
-        if not self.constraints_source.strip():
-            raise ValueError("trade_od.constraints_source must be non-empty.")
+        if self.constraints_source is not None and not self.constraints_source.strip():
+            raise ValueError("trade_od.constraints_source must be non-empty when provided.")
+        if not self.activation_phases:
+            raise ValueError("trade_od.activation_phases must contain at least one phase.")
+        if len(set(self.activation_phases)) != len(self.activation_phases):
+            raise ValueError("trade_od.activation_phases must not contain duplicates.")
+        if self.outer_trade_max_iter <= 0:
+            raise ValueError("trade_od.outer_trade_max_iter must be > 0.")
+        if self.outer_trade_convergence_tol <= 0:
+            raise ValueError("trade_od.outer_trade_convergence_tol must be > 0.")
+        if self.concentrate_to_refined_coeff <= 0:
+            raise ValueError("trade_od.concentrate_to_refined_coeff must be > 0.")
+        if self.scrap_to_secondary_coeff <= 0:
+            raise ValueError("trade_od.scrap_to_secondary_coeff must be > 0.")
         if self.historical_window_end_year < self.historical_window_start_year:
             raise ValueError(
                 "trade_od.historical_window_end_year must be >= historical_window_start_year."

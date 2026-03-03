@@ -66,7 +66,7 @@ def test_mvp_recycling_disruption_is_global_with_all_region_overrides():
 
     expected_keys = {
         "recycling_disruption",
-        "primary_refined_net_imports",
+        "trade_refined_import_need_multiplier",
         "collection_rate",
         "recycling_rate",
         "remanufacturing_rate",

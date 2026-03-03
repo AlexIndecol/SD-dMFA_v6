@@ -15,7 +15,6 @@ flowchart LR
         FD[final_demand.csv]
         EUS[end_use_shares.csv]
         PRO[primary_refined_output.csv]
-        PNI[primary_refined_net_imports.csv]
         SYL[stage_yields_losses.csv]
         RE["remanufacturing_end_use_eligibility.csv"]
         LT[lifetime_distributions.csv]
@@ -75,7 +74,7 @@ flowchart LR
             direction TB
             SPLIT[Demand split by end-use]
             SDTRE[service_demand_tre]
-            PRI["Primary availability (refined output + net imports)"]
+        PRI["Primary availability (refined output + endogenous trade adjustments)"]
             STOCK[Use-stock cohorts]
             OUT[Outflow from use]
             EOL[Old-scrap generation]
@@ -102,7 +101,6 @@ flowchart LR
     SHK --> PRI
     EUS --> SPLIT
     PRO --> PRI
-    PNI --> PRI
     SYL --> PEX
     SYL --> BEN
     SYL --> REF
@@ -226,17 +224,16 @@ flowchart LR
 
 ## OD Trade Extension (Current Increment)
 
-When `trade_od.enabled=true`, the runtime executes an additional OD allocation layer
-after per-slice SD-dMFA runs:
+When `trade_od.enabled=true` and `trade_od.runtime_mode=endogenous`, trade is part of the runtime coupling loop:
 
-1. Inputs: `trade_od_observed`, `trade_od_weights`, `trade_od_constraints`.
-2. Hybrid caps: empirical cap combined with SD capacity-envelope-derived cap.
-3. Outputs: `trade_od_flows.csv`, `trade_od_supplier_shares.csv`,
+1. Inputs: `trade_od_weights` (runtime required); `trade_od_observed`/`trade_od_constraints` are calibration-only.
+2. Solve: per material, outer iterations run SD-dMFA across all regions, build endogenous constraints, allocate OD flows, inject net trade back into MFA.
+3. Commodity channels: `concentrates`, `refined_metal`, `scrap`.
+4. Weights outside observed years: clamp+normalize.
+5. Outputs: `trade_od_flows.csv`, `trade_od_supplier_shares.csv`,
    `trade_od_supplier_diversification.csv`,
-   `trade_od_allocator_diagnostics.csv`, `trade_od_imports_exports.csv`.
-
-Outside the configured OD historical window, the model falls back to legacy
-regional net-import balance behavior.
+   `trade_od_allocator_diagnostics.csv`, `trade_od_imports_exports.csv`,
+   `trade_od_outer_loop_convergence.csv`.
 
 Update this diagram whenever any of the following changes:
 

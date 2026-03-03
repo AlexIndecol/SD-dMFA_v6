@@ -2,6 +2,32 @@
 
 This file captures *project-level* modeling decisions so the repository stays reproducible and a future AI agent has a single source of truth.
 
+## Confirmed decisions (2026-03-03)
+
+1) **Calibration patch promotion policy (MVP baseline)**
+- Promoted stock calibration patch source:
+  `outputs/runs/calibration/mvp/baseline/20260302-152016/search_best_config_patch.yml` (trial 19 search-best).
+- Promoted trade calibration patch source:
+  `outputs/runs/calibration/trade_od/mvp_stock_calibrated_trial19_tmp/baseline/20260302-163204/best_trade_od_patch.yml`.
+- Active promoted values in baseline config:
+  - `configs/runs/_core.yml`
+  - `mfa_parameters.fabrication_yield = 0.9516291043157408`
+  - `mfa_parameters.collection_rate = 0.598632813775853`
+  - `mfa_parameters.recycling_yield = 0.6204694683919402`
+  - `strategy.reman_yield = 0.6881412051746674`
+  - `strategy.lifetime_multiplier = 1.319713009082212`
+  - `configs/trade.yml` (`trade_od` block)
+  - `trade_od.coupling_relax_lambda_0_1 = 0.5`
+  - `trade_od.capacity_cap_sd_multiplier = 1.2`
+
+2) **Deprecated patch artifacts**
+- Deprecated stock alternative patch:
+  `outputs/runs/calibration/mvp/baseline/20260302-152016/best_config_patch.yml`.
+- Deprecated prior trade calibration baselines:
+  - `outputs/runs/calibration/trade_od/mvp/baseline/20260302-092503`
+  - `outputs/runs/calibration/trade_od/mvp/baseline/20260302-131753`
+- These artifacts are retained for reproducibility/backtesting only and must not be used as active baseline promotion targets.
+
 ## Confirmed decisions (2026-02-17)
 
 1) **Materials**
@@ -43,11 +69,11 @@ This file captures *project-level* modeling decisions so the repository stays re
 - End-use shares are an **exogenous data input** per **material × region × year**.
 - File: `data/exogenous/end_use_shares.csv` (schema in `registry/variable_registry.yml`).
 
-9) **Primary supply exogenous setup (refining anchored)**
-- Use **primary refined output by region** plus **primary refined net imports** as the canonical exogenous setup.
-- Files: `data/exogenous/primary_refined_output.csv`, `data/exogenous/primary_refined_net_imports.csv`.
+9) **Primary supply setup (refining anchored)**
+- Use **primary refined output by region** as the canonical exogenous anchor.
+- Trade contributions are solved endogenously from OD allocation and injected as runtime net-trade channels.
 - Canonical balance:
-  `primary_available_to_refining = max(0, primary_refined_output + primary_refined_net_imports)`.
+  `primary_available_to_refining = max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)`.
 
 10) **Final demand (service demand) input**
 - Final demand is an **exogenous data input** per **material × region × year**.
@@ -106,7 +132,7 @@ In SD, the exogenous demand trajectory is treated as *desired* demand:
 - Bottleneck pressure can amplify scarcity (`bottleneck_scarcity_gain`) and dampen collection pressure response (`bottleneck_collection_sensitivity`).
 
 27) **Incremental OD trade integration (weights + constrained allocator)**
-- Optional OD allocator is configured in `configs/trade_od.yml` and disabled by default (`trade_od.enabled=false`).
+- Optional OD allocator is configured in `configs/trade.yml` under `trade_od` and disabled by default (`trade_od.enabled=false`).
 - OD inputs are loaded from:
   - `data/exogenous/trade_od/baci_od_flow_observed.csv`
   - `data/exogenous/trade_od/baci_od_weights_rolling3.csv`
@@ -122,13 +148,28 @@ In SD, the exogenous demand trajectory is treated as *desired* demand:
   `Supplier_HHI`, `Supplier_Diversification`, `Supplier_Effective_suppliers`,
   and governance-weighted `Supplier_Governance_risk_weighted`.
 
-20) **Primary availability balance and compatibility window**
-- Exogenous `primary_refined_output` and `primary_refined_net_imports` are required canonical runtime inputs.
-- Primary availability to refining uses:
-  `primary_available_to_refining = max(0, primary_refined_output + primary_refined_net_imports)`.
+28) **Endogenous OD trade fully wired into dMFA runtime (2026-03-02)**
+- Legacy exogenous refined-net-import runtime driver is removed.
+- Trade runtime uses:
+  - exogenous OD weights as structural preferences,
+  - endogenous constraints derived from SD-dMFA state per material-region-year,
+  - SD capacity-envelope ceilings + configured cap controls.
+- Commodity channels active in runtime MFA equations:
+  - `refined_metal` (direct refined net trade),
+  - `concentrates` (converted with `concentrate_to_refined_coeff`),
+  - `scrap` (mapped through secondary/stockpile availability with `scrap_to_secondary_coeff`).
+- Runtime activation phases: calibration and reporting (configurable).
+- Weight extrapolation policy: clamp+normalize.
+- Observed OD flows and exogenous OD constraints are calibration/backtesting-only (not runtime required).
+- Legacy scenario shock-key fallback for exogenous refined net imports is removed.
+  Scenarios must use `trade_refined_import_need_multiplier`.
+
+20) **Primary availability balance**
+- Exogenous `primary_refined_output` remains the canonical runtime anchor.
+- In endogenous-trade mode, primary availability to refining uses:
+  `primary_available_to_refining = max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)`.
 - Deprecated one-cycle aliases are retained:
   `primary_production -> primary_refined_output`,
-  `primary_refined_net_imports -> primary_refined_net_imports`,
   `primary_available_to_refining -> primary_available_to_refining`.
 
 21) **Mass-balance conservation guardrail**

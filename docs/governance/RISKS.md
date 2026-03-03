@@ -8,8 +8,8 @@
 - **Capacity-loop abstraction risk:** capacity expansion/retirement is represented as an envelope index rather than explicit stage-specific physical capacity stocks.
 - **Static SD heterogeneity (config-driven):** material-region SD differences are rule-based constants from config (no endogenous learning/adaptation process within SD).
 - **Two-signal aggregation simplification:** service and circular supply stresses are now fed back year-by-year, but are still combined into one effective SD scarcity multiplier (interaction nonlinearities are not represented explicitly).
-- **Incremental OD trade limitation:** OD trade is currently constrained to configured historical windows and commodity-level routing (`concentrates`, `refined_metal`, `scrap`); outside-window behavior still relies on legacy net-import balance.
-- **Refining-anchor simplification:** using `max(0, primary_refined_output + primary_refined_net_imports)` as aggregate availability can under/over constrain supply where stock changes, quality effects, or unmodeled trade channels matter.
+- **Incremental OD trade limitation:** OD trade is currently constrained to configured historical windows and commodity-level routing (`concentrates`, `refined_metal`, `scrap`).
+- **Refining-anchor simplification:** using `max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)` as aggregate availability can under/over constrain supply where stock changes, quality effects, or unmodeled trade channels matter.
 - **Stage-yield data quality risk:** explicit extraction/beneficiation/refining/sorting yields are now structural drivers; weak or placeholder estimates can bias upstream throughput and losses.
 - **Simplified SD demand response:** single scalar scarcity → price → demand reduction; no substitution, technology switching, or sectoral elasticities.
 

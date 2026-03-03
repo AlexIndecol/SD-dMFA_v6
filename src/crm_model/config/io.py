@@ -435,6 +435,15 @@ def load_run_config(path: str | Path) -> RunConfig:
         if key == "trade":
             split_trade = payload
             continue
+        if key == "trade_od":
+            # Allow co-locating OD allocator settings inside the trade include file
+            # under a nested `trade_od:` mapping, while remaining compatible with
+            # standalone trade_od.yml payloads.
+            if isinstance(payload.get("trade_od"), dict):
+                out[key] = payload["trade_od"]
+            else:
+                out[key] = payload
+            continue
         out[key] = payload
 
     if "dimensions" not in out:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -30,6 +30,140 @@ def _normalize_weights_for_origins(weights_od: np.ndarray) -> np.ndarray:
         else:
             out[oi, :] = np.full(d_len, 1.0 / max(d_len, 1), dtype=float)
     return out
+
+
+def _shock_multiplier_series(years: Sequence[int], event: Mapping[str, Any] | None) -> np.ndarray:
+    mult = np.ones(len(years), dtype=float)
+    if not event:
+        return mult
+    start_year = int(event["start_year"])
+    duration_years = int(event["duration_years"])
+    shock_mult = float(event["multiplier"])
+    if duration_years < 0:
+        raise ValueError("trade shock duration_years must be >= 0.")
+    end_year = start_year + duration_years
+    for i, y in enumerate(years):
+        if start_year <= int(y) < end_year:
+            mult[i] = shock_mult
+    return mult
+
+
+def _resolve_trade_need_multiplier(
+    *,
+    years: Sequence[int],
+    shocks: Mapping[str, Any] | None,
+    key: str,
+) -> np.ndarray:
+    shocks_map = shocks or {}
+    event = shocks_map.get(key)
+    if hasattr(event, "model_dump"):
+        event = event.model_dump(exclude_none=True, exclude_unset=True)
+    if event is not None and not isinstance(event, Mapping):
+        raise ValueError(f"Unsupported trade shock event type for '{key}': {type(event)}")
+    return _shock_multiplier_series(years, event)
+
+
+def prepare_trade_weights_for_runtime(
+    *,
+    weights: pd.DataFrame,
+    years: Sequence[int],
+    materials: Sequence[str],
+    regions: Sequence[str],
+    commodities: Sequence[str],
+    policy: str = "clamp_normalize",
+) -> pd.DataFrame:
+    required_w = {
+        "year",
+        "material",
+        "commodity",
+        "origin_region",
+        "destination_region",
+        "weight_0_1",
+    }
+    if not required_w.issubset(set(weights.columns)):
+        raise ValueError("trade_od weights source missing required columns.")
+    if str(policy).strip() != "clamp_normalize":
+        raise ValueError("Unsupported trade_od weight extrapolation policy. Expected 'clamp_normalize'.")
+
+    years_sorted = [int(y) for y in sorted({int(y) for y in years})]
+    mats = [str(m) for m in materials]
+    regs = [str(r) for r in regions]
+    comms = [str(c) for c in commodities]
+
+    base = weights.copy()
+    base["year"] = pd.to_numeric(base["year"], errors="coerce").astype("Int64")
+    base = base.dropna(subset=["year"]).copy()
+    base["year"] = base["year"].astype(int)
+    base["material"] = base["material"].astype(str)
+    base["commodity"] = base["commodity"].astype(str)
+    base["origin_region"] = base["origin_region"].astype(str)
+    base["destination_region"] = base["destination_region"].astype(str)
+    base["weight_0_1"] = pd.to_numeric(base["weight_0_1"], errors="coerce").fillna(0.0).astype(float)
+
+    rows: List[dict] = []
+    for material in mats:
+        for commodity in comms:
+            sub_mc = base[(base["material"] == material) & (base["commodity"] == commodity)]
+            for origin in regs:
+                sub_mco = sub_mc[sub_mc["origin_region"] == origin]
+                if sub_mco.empty:
+                    uniform = 1.0 / max(len(regs), 1)
+                    for year in years_sorted:
+                        for destination in regs:
+                            rows.append(
+                                {
+                                    "year": int(year),
+                                    "material": material,
+                                    "commodity": commodity,
+                                    "origin_region": origin,
+                                    "destination_region": destination,
+                                    "weight_0_1": float(uniform),
+                                }
+                            )
+                    continue
+
+                piv = (
+                    sub_mco.pivot_table(
+                        index="year",
+                        columns="destination_region",
+                        values="weight_0_1",
+                        aggfunc="mean",
+                    )
+                    .reindex(columns=regs)
+                    .sort_index()
+                )
+                piv = piv.reindex(index=years_sorted).ffill().bfill()
+                piv = piv.fillna(0.0)
+                for year in years_sorted:
+                    row_arr = np.clip(piv.loc[int(year)].to_numpy(dtype=float), 0.0, np.inf)
+                    row_sum = float(row_arr.sum())
+                    if row_sum <= 0.0:
+                        row_arr = np.full(len(regs), 1.0 / max(len(regs), 1), dtype=float)
+                    else:
+                        row_arr = row_arr / row_sum
+                    for idx, destination in enumerate(regs):
+                        rows.append(
+                            {
+                                "year": int(year),
+                                "material": material,
+                                "commodity": commodity,
+                                "origin_region": origin,
+                                "destination_region": destination,
+                                "weight_0_1": float(row_arr[idx]),
+                            }
+                        )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "year",
+            "material",
+            "commodity",
+            "origin_region",
+            "destination_region",
+            "weight_0_1",
+        ],
+    ).sort_values(["year", "material", "commodity", "origin_region", "destination_region"]).reset_index(drop=True)
 
 
 def allocate_with_capacity_caps(
@@ -246,13 +380,191 @@ def compute_supplier_diversification_indices(
     return out[cols].sort_values(["year", "material", "region"]).reset_index(drop=True)
 
 
+def build_endogenous_trade_constraints(
+    *,
+    years: Sequence[int],
+    material: str,
+    regions: Sequence[str],
+    commodities: Sequence[str],
+    mfa_diagnostics_by_region: Mapping[str, Mapping[str, np.ndarray]],
+    shocks_by_region: Mapping[str, Mapping[str, Any]] | None,
+    concentrate_to_refined_coeff: float,
+    scrap_to_secondary_coeff: float,
+) -> pd.DataFrame:
+    years_arr = np.array([int(y) for y in years], dtype=int)
+    regions_list = [str(r) for r in regions]
+    commodities_set = {str(c) for c in commodities}
+    rows: List[dict] = []
+
+    for region in regions_list:
+        diag = mfa_diagnostics_by_region.get(region)
+        if diag is None:
+            raise ValueError(f"Missing MFA diagnostics for endogenous trade constraints: region={region}")
+
+        refined_input_required = np.maximum(
+            np.array(diag.get("refined_input_required_pre_cap", np.zeros(len(years_arr))), dtype=float),
+            0.0,
+        )
+        primary_available = np.maximum(
+            np.array(diag.get("primary_available_to_refining", np.zeros(len(years_arr))), dtype=float),
+            0.0,
+        )
+        secondary_gap = np.maximum(
+            np.array(diag.get("secondary_feed_gap_proxy", np.zeros(len(years_arr))), dtype=float),
+            0.0,
+        )
+        secondary_surplus = np.maximum(
+            np.array(diag.get("secondary_feed_surplus_proxy", np.zeros(len(years_arr))), dtype=float),
+            0.0,
+        )
+        upstream_gap_refined_eq = np.maximum(
+            np.array(
+                diag.get("upstream_concentrate_gap_refined_equiv_proxy", np.zeros(len(years_arr))),
+                dtype=float,
+            ),
+            0.0,
+        )
+        upstream_surplus_refined_eq = np.maximum(
+            np.array(
+                diag.get("upstream_concentrate_surplus_refined_equiv_proxy", np.zeros(len(years_arr))),
+                dtype=float,
+            ),
+            0.0,
+        )
+
+        shocks_region = (shocks_by_region or {}).get(region, {})
+        refined_need_mult = _resolve_trade_need_multiplier(
+            years=years_arr,
+            shocks=shocks_region,
+            key="trade_refined_import_need_multiplier",
+        )
+        conc_need_mult = _resolve_trade_need_multiplier(
+            years=years_arr,
+            shocks=shocks_region,
+            key="trade_concentrate_import_need_multiplier",
+        )
+        scrap_need_mult = _resolve_trade_need_multiplier(
+            years=years_arr,
+            shocks=shocks_region,
+            key="trade_scrap_import_need_multiplier",
+        )
+        export_cap_mult = _resolve_trade_need_multiplier(
+            years=years_arr,
+            shocks=shocks_region,
+            key="trade_export_capacity_multiplier",
+        )
+
+        refined_need = np.maximum(refined_input_required - primary_available, 0.0) * refined_need_mult
+        refined_supply = np.maximum(primary_available - refined_input_required, 0.0)
+        refined_cap = np.maximum(refined_supply * export_cap_mult, 0.0)
+
+        conc_need = (upstream_gap_refined_eq / float(concentrate_to_refined_coeff)) * conc_need_mult
+        conc_supply = upstream_surplus_refined_eq / float(concentrate_to_refined_coeff)
+        conc_cap = np.maximum(conc_supply * export_cap_mult, 0.0)
+
+        scrap_need = (secondary_gap / float(scrap_to_secondary_coeff)) * scrap_need_mult
+        scrap_supply = secondary_surplus / float(scrap_to_secondary_coeff)
+        scrap_cap = np.maximum(scrap_supply * export_cap_mult, 0.0)
+
+        for yi, year in enumerate(years_arr):
+            if "refined_metal" in commodities_set:
+                rows.append(
+                    {
+                        "year": int(year),
+                        "material": str(material),
+                        "commodity": "refined_metal",
+                        "region": str(region),
+                        "supply_avail_kt": float(max(refined_supply[yi], 0.0)),
+                        "import_need_kt": float(max(refined_need[yi], 0.0)),
+                        "export_cap_raw_kt": float(max(refined_cap[yi], 0.0)),
+                        "exportable_kt": float(max(refined_supply[yi], 0.0)),
+                    }
+                )
+            if "concentrates" in commodities_set:
+                rows.append(
+                    {
+                        "year": int(year),
+                        "material": str(material),
+                        "commodity": "concentrates",
+                        "region": str(region),
+                        "supply_avail_kt": float(max(conc_supply[yi], 0.0)),
+                        "import_need_kt": float(max(conc_need[yi], 0.0)),
+                        "export_cap_raw_kt": float(max(conc_cap[yi], 0.0)),
+                        "exportable_kt": float(max(conc_supply[yi], 0.0)),
+                    }
+                )
+            if "scrap" in commodities_set:
+                rows.append(
+                    {
+                        "year": int(year),
+                        "material": str(material),
+                        "commodity": "scrap",
+                        "region": str(region),
+                        "supply_avail_kt": float(max(scrap_supply[yi], 0.0)),
+                        "import_need_kt": float(max(scrap_need[yi], 0.0)),
+                        "export_cap_raw_kt": float(max(scrap_cap[yi], 0.0)),
+                        "exportable_kt": float(max(scrap_supply[yi], 0.0)),
+                    }
+                )
+
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "year",
+            "material",
+            "commodity",
+            "region",
+            "supply_avail_kt",
+            "import_need_kt",
+            "export_cap_raw_kt",
+            "exportable_kt",
+        ],
+    ).sort_values(["year", "material", "commodity", "region"]).reset_index(drop=True)
+
+
+def compute_net_trade_imports_by_commodity_region(
+    *,
+    imports_exports: pd.DataFrame,
+    years: Sequence[int],
+    material: str,
+    regions: Sequence[str],
+    commodities: Sequence[str],
+) -> Dict[str, np.ndarray]:
+    out: Dict[str, np.ndarray] = {
+        str(c): np.zeros((len(years), len(regions)), dtype=float) for c in commodities
+    }
+    if imports_exports.empty:
+        return out
+
+    years_list = [int(y) for y in years]
+    year_to_idx = {int(y): i for i, y in enumerate(years_list)}
+    region_to_idx = {str(r): i for i, r in enumerate(regions)}
+    sub = imports_exports[imports_exports["material"].astype(str) == str(material)].copy()
+    if sub.empty:
+        return out
+    for row in sub.itertuples(index=False):
+        commodity = str(getattr(row, "commodity"))
+        if commodity not in out:
+            continue
+        year = int(getattr(row, "year"))
+        region = str(getattr(row, "region"))
+        yi = year_to_idx.get(year)
+        ri = region_to_idx.get(region)
+        if yi is None or ri is None:
+            continue
+        imports_v = float(getattr(row, "imports_kt", 0.0))
+        exports_v = float(getattr(row, "exports_kt", 0.0))
+        out[commodity][yi, ri] = imports_v - exports_v
+    return out
+
+
 def run_trade_od_allocator(
     *,
     years: Sequence[int],
     materials: Sequence[str],
     regions: Sequence[str],
     commodities: Sequence[str],
-    observed_flows: pd.DataFrame,
+    observed_flows: pd.DataFrame | None,
     weights: pd.DataFrame,
     constraints: pd.DataFrame,
     sd_capacity_envelope_by_material_region: Mapping[Tuple[str, str], np.ndarray],
@@ -264,14 +576,11 @@ def run_trade_od_allocator(
     coupling_relax_lambda_0_1: float,
     max_reallocation_passes: int,
 ) -> TradeODArtifacts:
-    """Run constrained OD allocator for active years in the OD historical window."""
+    """Run constrained OD allocator for the provided years."""
     reg_list = [str(r) for r in regions]
-    year_set = {int(y) for y in years}
-    active_years = [
-        int(y)
-        for y in sorted(year_set)
-        if int(y) >= int(historical_window_start_year) and int(y) <= int(historical_window_end_year)
-    ]
+    years_list = [int(y) for y in years]
+    year_to_idx = {int(y): i for i, y in enumerate(years_list)}
+    active_years = sorted({int(y) for y in years_list})
 
     flow_rows: List[dict] = []
     diag_rows: List[dict] = []
@@ -320,7 +629,7 @@ def run_trade_od_allocator(
                     cap_ts = sd_capacity_envelope_by_material_region.get((str(material), str(origin)))
                     cap_factor = 1.0
                     if cap_ts is not None and len(cap_ts) == len(years):
-                        y_idx = list(years).index(year)
+                        y_idx = year_to_idx[int(year)]
                         cap_factor = max(float(cap_ts[y_idx]), 0.0)
                     sd_cap[oi] = max(supply[oi] * cap_factor * float(capacity_cap_sd_multiplier), 0.0)
 
@@ -559,3 +868,33 @@ def validate_trade_od_sources(
         raise ValueError("trade_od weights contains unknown destination_region values.")
     if not set(constraints["region"].astype(str).unique()).issubset(regs):
         raise ValueError("trade_od constraints contains unknown region values.")
+
+
+def validate_trade_od_runtime_weights(
+    *,
+    weights: pd.DataFrame,
+    materials: Iterable[str],
+    regions: Iterable[str],
+    commodities: Iterable[str],
+) -> None:
+    required = {
+        "year",
+        "material",
+        "commodity",
+        "origin_region",
+        "destination_region",
+        "weight_0_1",
+    }
+    if not required.issubset(set(weights.columns)):
+        raise ValueError("trade_od weights source missing required columns.")
+    mats = {str(m) for m in materials}
+    regs = {str(r) for r in regions}
+    comms = {str(c) for c in commodities}
+    if not set(weights["material"].astype(str).unique()).issubset(mats):
+        raise ValueError("trade_od weights contains unknown materials.")
+    if not set(weights["commodity"].astype(str).unique()).issubset(comms):
+        raise ValueError("trade_od weights contains unknown commodities.")
+    if not set(weights["origin_region"].astype(str).unique()).issubset(regs):
+        raise ValueError("trade_od weights contains unknown origin_region values.")
+    if not set(weights["destination_region"].astype(str).unique()).issubset(regs):
+        raise ValueError("trade_od weights contains unknown destination_region values.")

@@ -42,8 +42,12 @@ Canonical terms used across SD, dMFA, coupling, and scenario configs.
 ## Primary supply terms
 
 - **Primary refined output**: domestic primary refined metal output.
-- **Primary refined net imports**: net refined imports.
-- **Primary available to refining**: `max(0, primary_refined_output + primary_refined_net_imports)`.
+- **Legacy refined-net-import exogenous input**: retired runtime input removed from active model configuration.
+- **Primary refined net trade endogenous**: runtime net refined-equivalent trade from OD allocation.
+- **Primary available to refining**: in endogenous-trade mode,
+  `max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)`.
+- **Capacity envelope ceiling**: SD-derived export-cap modulator applied to endogenous trade allocation.
+- **Weight extrapolation clamp+normalize**: OD weights before/after observed years are clamped to boundary years and row-normalized.
 
 ## Temporal config forms
 

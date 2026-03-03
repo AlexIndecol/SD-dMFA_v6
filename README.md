@@ -156,7 +156,6 @@ Replace these with real datasets before drawing conclusions:
 - `data/exogenous/final_demand.csv`
 - `data/exogenous/end_use_shares.csv`
 - `data/exogenous/primary_refined_output.csv`
-- `data/exogenous/primary_refined_net_imports.csv`
 - `data/exogenous/stage_yields_losses.csv`
 - `data/exogenous/collection_routing_rates.csv` (`recycling_rate`, `remanufacturing_rate`, `disposal_rate`)
 - `data/exogenous/remanufacturing_end_use_eligibility.csv` (`value` in [0,1] by year/region/end_use)
@@ -173,7 +172,7 @@ Schemas are documented in `data/README.md` and enforced by `registry/variable_re
 - `configs/scenarios/mvp/*.yml` – scenario-file sets loaded via `includes.scenarios`
 - `configs/runs/mvp.yml` – thin overlay run config (`extends: ./_core.yml`)
 - `configs/regions.yml`, `configs/materials.yml`, `configs/end_use.yml`, `configs/stages.yml`, `configs/qualities.yml` – split-layout single sources
-- `configs/trade_od.yml` – optional OD-trade allocator controls (default disabled)
+- `configs/trade.yml` – trade dimensions plus optional `trade_od` allocator controls (default disabled)
 - `registry/` – exogenous variable registry (file paths + schema)
 - `data/exogenous/` – exogenous inputs (one variable per file)
 - `data/raw/`, `data/processed/`, `data/external/` – data-lake scaffold for future ingestion/ETL separation

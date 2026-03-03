@@ -11,7 +11,7 @@ includes:
   stages: ../stages.yml
   qualities: ../qualities.yml
   trade: ../trade.yml
-  trade_od: ../trade_od.yml
+  trade_od: ../trade.yml
   coupling: ../coupling.yml
   indicators: ../indicators.yml
   variables: ../../registry/variable_registry.yml
@@ -72,15 +72,15 @@ sd_heterogeneity:
       coupling_service_stress_gain: 4.5
 
 mfa_parameters:
-  fabrication_yield: 0.9106381416270936
-  collection_rate: 0.9008874995045274
-  recycling_yield: 0.8812045184007978
+  fabrication_yield: 0.9516291043157408
+  collection_rate: 0.598632813775853
+  recycling_yield: 0.6204694683919402
   reman_yield: 0.7168092328464711
   mass_balance_tolerance: 1.0e-8
 
 strategy:
-  reman_yield: 0.8352044626291464
-  lifetime_multiplier: 1.1526680751302085
+  reman_yield: 0.6881412051746674
+  lifetime_multiplier: 1.319713009082212
   refinery_stockpile_release_rate: 0.25
   new_scrap_to_secondary_share: 0.75
   strategic_reserve_enabled: false
@@ -156,7 +156,10 @@ shocks:
   demand_surge: null
   recycling_disruption: null
   primary_refined_output: null
-  primary_refined_net_imports: null
+  trade_refined_import_need_multiplier: null
+  trade_concentrate_import_need_multiplier: null
+  trade_scrap_import_need_multiplier: null
+  trade_export_capacity_multiplier: null
   extraction_yield: null
   beneficiation_yield: null
   refining_yield: null
@@ -170,7 +173,7 @@ shocks:
 
 variants:
   baseline:
-    description: Reference pathway with exogenous demand, primary refined supply inputs, and routing rates as provided in input datasets.
+    description: Reference pathway with exogenous demand, primary refined output anchor, endogenous trade channels, and routing rates as provided in input datasets.
     implementation:
       - No additional variant-level overrides.
-      - Uses baseline mfa_parameters/strategy plus exogenous primary_refined_output, primary_refined_net_imports, stage_yields_losses, and collection_routing_rates.
+      - Uses baseline mfa_parameters/strategy plus exogenous primary_refined_output, stage_yields_losses, collection_routing_rates, and endogenous OD trade channels when enabled.

@@ -11,7 +11,8 @@ Each run exports the exact assumptions used to `outputs/.../assumptions_used.yml
 ## CONFIRMED items relevant to v1
 - **Region aliases accepted** in exogenous inputs (e.g., `EU-27` → `EU27`, `Rest of the World`/`ROW` → `RoW`).
 - **Primary refined output meaning:** `primary_refined_output` is domestic primary refined metal production (metal content).
-- **Primary availability balance (canonical):** `primary_available_to_refining = max(0, primary_refined_output + primary_refined_net_imports)`.
+- **Primary availability balance (endogenous trade runtime):**
+  `primary_available_to_refining = max(0, primary_refined_output + trade_refined_net_imports + concentrate_to_refined_coeff * trade_concentrate_net_imports)`.
 - **Explicit stage yields/loss routing:** extraction, beneficiation, refining, and sorting use exogenous `stage_yields_losses.csv` controls.
 - **Explicit scrap taxonomy:** new scrap (pre-use fabrication losses) and old scrap (post-use outflow) are tracked separately.
 - **Secondary inventory mechanism:** secondary feed is buffered as `refinery_stockpile_native` at refining with release-rate control (`refinery_stockpile_release_rate`).
@@ -28,6 +29,7 @@ Each run exports the exact assumptions used to `outputs/.../assumptions_used.yml
 
 ## TEMP items shipped in the template
 - **Identity upstream defaults:** stage yields default to `1.0` and loss routes to canonical sinks when detailed measured yields/loss splits are not yet available for all slices.
-- **Incremental OD trade scope:** OD trade allocator is enabled only when `trade_od.enabled=true`, and currently runs on the configured historical window with fallback to legacy net-import balance outside that window.
+- **Incremental OD trade scope:** OD trade allocator is enabled only when `trade_od.enabled=true`.
+  Runtime uses exogenous OD weights + endogenous constraints for 3 commodities and solves in-loop for calibration and reporting phases.
 
 Replace TEMP items before using results for interpretation.

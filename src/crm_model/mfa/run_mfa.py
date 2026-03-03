@@ -66,11 +66,42 @@ def _resolve_primary_available_to_refining(
 ) -> np.ndarray:
     primary_available = params.get("primary_available_to_refining")
     if primary_available is None:
-        raise ValueError(
-            "mfa_params must include primary_available_to_refining with shape (t,r)."
-        )
+        primary_refined_output = params.get("primary_refined_output")
+        if primary_refined_output is None:
+            raise ValueError(
+                "mfa_params must include either primary_available_to_refining or primary_refined_output "
+                "with shape (t,r)."
+            )
+        primary_refined_output_tr = np.array(primary_refined_output, dtype=float)
+        trade_refined_tr = np.array(params.get("trade_refined_net_imports_tr", 0.0), dtype=float)
+        trade_concentrate_tr = np.array(params.get("trade_concentrate_net_imports_tr", 0.0), dtype=float)
+        coeff = float(params.get("concentrate_to_refined_coeff", 1.0))
+        if coeff <= 0:
+            raise ValueError("concentrate_to_refined_coeff must be > 0.")
 
-    primary_available_tr = np.array(primary_available, dtype=float)
+        for name, arr in {
+            "primary_refined_output": primary_refined_output_tr,
+            "trade_refined_net_imports_tr": trade_refined_tr,
+            "trade_concentrate_net_imports_tr": trade_concentrate_tr,
+        }.items():
+            if arr.ndim == 0:
+                arr = np.full((len(years), len(regions)), float(arr), dtype=float)
+            if arr.ndim != 2 or arr.shape != (len(years), len(regions)):
+                raise ValueError(
+                    f"{name} must have shape (t,r)=({len(years)},{len(regions)}); got {arr.shape}"
+                )
+            if name == "primary_refined_output":
+                primary_refined_output_tr = arr
+            elif name == "trade_refined_net_imports_tr":
+                trade_refined_tr = arr
+            else:
+                trade_concentrate_tr = arr
+        primary_available_tr = np.maximum(
+            primary_refined_output_tr + trade_refined_tr + (trade_concentrate_tr * coeff),
+            0.0,
+        )
+    else:
+        primary_available_tr = np.array(primary_available, dtype=float)
     if primary_available_tr.ndim != 2 or primary_available_tr.shape != (len(years), len(regions)):
         raise ValueError(
             "primary_available_to_refining must have shape "
@@ -81,23 +112,24 @@ def _resolve_primary_available_to_refining(
     return primary_available_tr
 
 
-def _resolve_primary_refined_net_imports(
+def _resolve_trade_param_tr(
     *,
     years: List[int],
     regions: List[str],
     params: Dict[str, Any],
+    key: str,
 ) -> np.ndarray:
-    net = params.get("primary_refined_net_imports")
-    if net is None:
+    val = params.get(key)
+    if val is None:
         return np.zeros((len(years), len(regions)), dtype=float)
-
-    net_tr = np.array(net, dtype=float)
-    if net_tr.ndim != 2 or net_tr.shape != (len(years), len(regions)):
+    arr = np.array(val, dtype=float)
+    if arr.ndim == 0:
+        arr = np.full((len(years), len(regions)), float(arr), dtype=float)
+    if arr.ndim != 2 or arr.shape != (len(years), len(regions)):
         raise ValueError(
-            "primary_refined_net_imports must have shape "
-            f"(t,r)=({len(years)},{len(regions)}); got {net_tr.shape}"
+            f"{key} must have shape (t,r)=({len(years)},{len(regions)}); got {arr.shape}"
         )
-    return net_tr
+    return arr
 
 
 def run_flodym_mfa(
@@ -231,11 +263,30 @@ def run_flodym_mfa(
         regions=regions,
         params=params,
     )
-    primary_refined_net_imports_tr = _resolve_primary_refined_net_imports(
+    trade_refined_net_imports_tr = _resolve_trade_param_tr(
         years=years,
         regions=regions,
         params=params,
+        key="trade_refined_net_imports_tr",
     )
+    trade_concentrate_net_imports_tr = _resolve_trade_param_tr(
+        years=years,
+        regions=regions,
+        params=params,
+        key="trade_concentrate_net_imports_tr",
+    )
+    trade_scrap_net_imports_tr = _resolve_trade_param_tr(
+        years=years,
+        regions=regions,
+        params=params,
+        key="trade_scrap_net_imports_tr",
+    )
+    concentrate_to_refined_coeff = float(params.get("concentrate_to_refined_coeff", 1.0))
+    scrap_to_secondary_coeff = float(params.get("scrap_to_secondary_coeff", 1.0))
+    if concentrate_to_refined_coeff <= 0:
+        raise ValueError("concentrate_to_refined_coeff must be > 0.")
+    if scrap_to_secondary_coeff <= 0:
+        raise ValueError("scrap_to_secondary_coeff must be > 0.")
 
     extraction_yield_ts = _as_timeseries(
         params.get("extraction_yield", 1.0),
@@ -625,10 +676,30 @@ def run_flodym_mfa(
             dims=dims_tr,
             values=primary_available_tr,
         ),
-        "primary_refined_net_imports": Parameter(
-            name="primary_refined_net_imports",
+        "trade_refined_net_imports": Parameter(
+            name="trade_refined_net_imports",
             dims=dims_tr,
-            values=primary_refined_net_imports_tr,
+            values=trade_refined_net_imports_tr,
+        ),
+        "trade_concentrate_net_imports": Parameter(
+            name="trade_concentrate_net_imports",
+            dims=dims_tr,
+            values=trade_concentrate_net_imports_tr,
+        ),
+        "trade_scrap_net_imports": Parameter(
+            name="trade_scrap_net_imports",
+            dims=dims_tr,
+            values=trade_scrap_net_imports_tr,
+        ),
+        "concentrate_to_refined_coeff": Parameter(
+            name="concentrate_to_refined_coeff",
+            dims=dims_t,
+            values=np.array([concentrate_to_refined_coeff] * len(years), dtype=float),
+        ),
+        "scrap_to_secondary_coeff": Parameter(
+            name="scrap_to_secondary_coeff",
+            dims=dims_t,
+            values=np.array([scrap_to_secondary_coeff] * len(years), dtype=float),
         ),
         "extraction_yield": Parameter(name="extraction_yield", dims=dims_t, values=extraction_yield_ts),
         "beneficiation_yield": Parameter(name="beneficiation_yield", dims=dims_t, values=beneficiation_yield_ts),
@@ -693,10 +764,17 @@ def run_flodym_mfa(
         "__service_demand": Parameter(name="__service_demand", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__delivered_service": Parameter(name="__delivered_service", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__unmet_service": Parameter(name="__unmet_service", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
-        "__primary_refined_net_imports": Parameter(name="__primary_refined_net_imports", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__trade_refined_net_imports": Parameter(name="__trade_refined_net_imports", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__trade_concentrate_net_imports": Parameter(name="__trade_concentrate_net_imports", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__trade_scrap_net_imports": Parameter(name="__trade_scrap_net_imports", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__primary_available_to_refining": Parameter(name="__primary_available_to_refining", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__primary_supply_used": Parameter(name="__primary_supply_used", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__secondary_supply_used": Parameter(name="__secondary_supply_used", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__refined_input_required_pre_cap": Parameter(name="__refined_input_required_pre_cap", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__secondary_feed_gap_proxy": Parameter(name="__secondary_feed_gap_proxy", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__secondary_feed_surplus_proxy": Parameter(name="__secondary_feed_surplus_proxy", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__upstream_concentrate_gap_refined_equiv_proxy": Parameter(name="__upstream_concentrate_gap_refined_equiv_proxy", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
+        "__upstream_concentrate_surplus_refined_equiv_proxy": Parameter(name="__upstream_concentrate_surplus_refined_equiv_proxy", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__eol_disposal": Parameter(name="__eol_disposal", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
         "__mass_balance_residual_abs_max": Parameter(name="__mass_balance_residual_abs_max", dims=dims_t, values=np.zeros(len(years), dtype=float)),
         "__eol_uncollected": Parameter(name="__eol_uncollected", dims=dims_tre, values=np.zeros_like(service_demand_tre)),
@@ -747,8 +825,22 @@ def run_flodym_mfa(
     primary = mfa.parameters["__primary_supply_used"].values.sum(axis=(1, 2))
     secondary = mfa.parameters["__secondary_supply_used"].values.sum(axis=(1, 2))
 
-    primary_refined_net_imports_ag = mfa.parameters["primary_refined_net_imports"].values.sum(axis=1)
+    trade_refined_net_imports_ag = mfa.parameters["trade_refined_net_imports"].values.sum(axis=1)
+    trade_concentrate_net_imports_ag = mfa.parameters["trade_concentrate_net_imports"].values.sum(axis=1)
+    trade_scrap_net_imports_ag = mfa.parameters["trade_scrap_net_imports"].values.sum(axis=1)
+    primary_refined_net_trade_endogenous_ag = (
+        trade_refined_net_imports_ag + (trade_concentrate_net_imports_ag * float(concentrate_to_refined_coeff))
+    )
     primary_available_ag = mfa.parameters["primary_available_to_refining"].values.sum(axis=1)
+    refined_input_required_pre_cap_ag = mfa.parameters["__refined_input_required_pre_cap"].values.sum(axis=(1, 2))
+    secondary_feed_gap_proxy_ag = mfa.parameters["__secondary_feed_gap_proxy"].values.sum(axis=(1, 2))
+    secondary_feed_surplus_proxy_ag = mfa.parameters["__secondary_feed_surplus_proxy"].values.sum(axis=(1, 2))
+    upstream_concentrate_gap_proxy_ag = (
+        mfa.parameters["__upstream_concentrate_gap_refined_equiv_proxy"].values.sum(axis=(1, 2))
+    )
+    upstream_concentrate_surplus_proxy_ag = (
+        mfa.parameters["__upstream_concentrate_surplus_refined_equiv_proxy"].values.sum(axis=(1, 2))
+    )
 
     inflow_new_ag = mfa.flows[f"{fab} => {use}"].values.sum(axis=(1, 2))
     inflow_reman_ag = mfa.flows[f"{rem} => {use}"].values.sum(axis=(1, 2))
@@ -823,9 +915,17 @@ def run_flodym_mfa(
         unmet_service=pd.Series(unmet, index=idx),
         service_level=pd.Series(service_level, index=idx),
         primary_supply=pd.Series(primary, index=idx),
-        primary_refined_net_imports=pd.Series(primary_refined_net_imports_ag, index=idx),
+        primary_refined_net_trade_endogenous=pd.Series(primary_refined_net_trade_endogenous_ag, index=idx),
+        trade_refined_net_imports=pd.Series(trade_refined_net_imports_ag, index=idx),
+        trade_concentrate_net_imports=pd.Series(trade_concentrate_net_imports_ag, index=idx),
+        trade_scrap_net_imports=pd.Series(trade_scrap_net_imports_ag, index=idx),
         primary_available_to_refining=pd.Series(primary_available_ag, index=idx),
         secondary_supply=pd.Series(secondary, index=idx),
+        refined_input_required_pre_cap=pd.Series(refined_input_required_pre_cap_ag, index=idx),
+        secondary_feed_gap_proxy=pd.Series(secondary_feed_gap_proxy_ag, index=idx),
+        secondary_feed_surplus_proxy=pd.Series(secondary_feed_surplus_proxy_ag, index=idx),
+        upstream_concentrate_gap_refined_equiv_proxy=pd.Series(upstream_concentrate_gap_proxy_ag, index=idx),
+        upstream_concentrate_surplus_refined_equiv_proxy=pd.Series(upstream_concentrate_surplus_proxy_ag, index=idx),
         inflow_to_use_total=pd.Series(inflow_total_ag, index=idx),
         inflow_to_use_new=pd.Series(inflow_new_ag, index=idx),
         inflow_to_use_reman=pd.Series(inflow_reman_ag, index=idx),

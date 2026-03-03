@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.10.51
+- Promoted calibration patches to active baseline config surfaces:
+  - `configs/runs/_core.yml` (shared stock parameters)
+  - `configs/trade.yml` (`trade_od` allocator controls)
+  - stock patch from `outputs/runs/calibration/mvp/baseline/20260302-152016/search_best_config_patch.yml`,
+  - trade patch from `outputs/runs/calibration/trade_od/mvp_stock_calibrated_trial19_tmp/baseline/20260302-163204/best_trade_od_patch.yml`.
+- Activated promoted trade controls:
+  - `trade_od.coupling_relax_lambda_0_1: 0.5`
+  - `trade_od.capacity_cap_sd_multiplier: 1.2`
+- Deprecated non-selected patch artifacts for baseline promotion:
+  - `outputs/runs/calibration/mvp/baseline/20260302-152016/best_config_patch.yml`
+  - `outputs/runs/calibration/trade_od/mvp/baseline/20260302-092503`
+  - `outputs/runs/calibration/trade_od/mvp/baseline/20260302-131753`
+
+## 0.10.50
+- Fully wired endogenous OD trade into runtime SD-dMFA coupling when `trade_od.enabled=true` and `trade_od.runtime_mode=endogenous`.
+- Added material-level outer trade loop controls:
+  - `trade_od.outer_trade_max_iter`
+  - `trade_od.outer_trade_convergence_tol`
+  - runtime diagnostics artifact: `trade_od_outer_loop_convergence.csv`.
+- Runtime trade dependency update:
+  - `trade_od_weights` is runtime-required in trade mode.
+  - `trade_od_observed` and `trade_od_constraints` are calibration/backtesting-only.
+- Added runtime weight extrapolation policy:
+  - `trade_od.weight_extrapolation_policy=clamp_normalize`.
+- Added endogenous commodity trade mapping controls:
+  - `trade_od.concentrate_to_refined_coeff`
+  - `trade_od.scrap_to_secondary_coeff`.
+- Added trade shock channels:
+  - `trade_refined_import_need_multiplier`
+  - `trade_concentrate_import_need_multiplier`
+  - `trade_scrap_import_need_multiplier`
+  - `trade_export_capacity_multiplier`.
+- Removed legacy compatibility alias for refined-net-import shocks:
+  - scenarios must use `trade_refined_import_need_multiplier` directly.
+- Removed runtime dependency on exogenous refined-net-import CSV inputs.
+- Added MFA runtime diagnostics for endogenous trade constraint construction:
+  - refined input required pre-cap,
+  - secondary-feed gap/surplus proxies,
+  - upstream concentrate-equivalent gap/surplus proxies.
+- Added/updated tests for:
+  - weight extrapolation clamp+normalize,
+  - endogenous constraint builder and direct trade-shock mapping,
+  - trade config surface defaults.
+
 ## 0.10.49
 - Canonicalized active ramp-path usage to `data/ramp_profiles/**` across configs/tests/docs.
 - Kept one-cycle runtime backward compatibility for legacy `data/scenario_profiles/**` references in `crm_model.cli`.
@@ -300,22 +345,22 @@
 ## 0.10.29
 - Migrated canonical primary-supply runtime inputs to refining-anchored variables:
   - `primary_refined_output`
-  - `primary_refined_net_imports`
+  - legacy exogenous refined-net-import input
   - `stage_yields_losses`
 - Rewired CLI/data validation/MFA runtime to:
-  - compute `primary_available_to_refining = max(0, primary_refined_output + primary_refined_net_imports)`,
+  - compute primary availability using refined output plus contemporaneous trade signal (legacy formulation in that release),
   - reconstruct upstream extraction/beneficiation/refining throughput from explicit yields,
   - route stage losses/rejects using configured disposal/sysenv shares.
 - Extended scenario shock surface with stage-consistent channels:
-  - `primary_refined_output`, `primary_refined_net_imports`,
+  - `primary_refined_output`, legacy exogenous refined-net-import shock,
   - `extraction_yield`, `beneficiation_yield`, `refining_yield`, `sorting_yield`.
 - Added migration utilities and diagnostics:
   - `scripts/data/build_primary_chain_model_ready.py`
   - diagnostics outputs under `data/exogenous/diagnostics/primary_chain_model_ready/`.
 - Kept one-cycle compatibility aliases with deprecation behavior:
-  - `primary_production`, `primary_refined_net_imports`,
+  - `primary_production`, legacy exogenous refined-net-import alias,
   - `primary_available_to_refining`,
-  - shock alias `primary_refined_net_imports`.
+  - legacy refined-net-import shock alias.
 - Updated architecture/assumptions/scenarios/risk/flowchart documentation to the new canonical setup.
 
 ## 0.10.28

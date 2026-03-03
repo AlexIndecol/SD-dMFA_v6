@@ -72,7 +72,6 @@ def validate_exogenous_inputs(cfg: RunConfig, *, repo_root: Path) -> List[str]:
         if var_name in {
             "final_demand",
             "primary_refined_output",
-            "primary_refined_net_imports",
             "stage_yields_losses",
             "collection_routing_rates",
             "remanufacturing_end_use_eligibility",
@@ -193,7 +192,7 @@ def validate_exogenous_inputs(cfg: RunConfig, *, repo_root: Path) -> List[str]:
                 )
 
             # Stage-throughput reconstruction sanity against refining anchor.
-            # Uses primary_refined_output (+ optional primary_refined_net_imports) if available.
+            # Uses primary_refined_output only.
             vars_map = cfg.variables or {}
             refined_meta = vars_map.get("primary_refined_output")
             if refined_meta is not None:
@@ -210,33 +209,8 @@ def validate_exogenous_inputs(cfg: RunConfig, *, repo_root: Path) -> List[str]:
                     refined["region"] = refined["region"].astype(str).map(normalize_region)
                     refined["value"] = pd.to_numeric(refined["value"], errors="coerce").astype(float)
 
-                    net = None
-                    net_meta = vars_map.get("primary_refined_net_imports")
-                    if net_meta is not None:
-                        net_path = (repo_root / net_meta.path).resolve()
-                        if net_path.exists():
-                            net = pd.read_csv(net_path)
-                            for c in ["year", "material", "region", "value"]:
-                                if c not in net.columns:
-                                    raise ValueError(
-                                        "primary_refined_net_imports must contain columns "
-                                        "year, material, region, value for stage reconstruction checks."
-                                    )
-                            net["material"] = net["material"].astype(str).map(normalize_material)
-                            net["region"] = net["region"].astype(str).map(normalize_region)
-                            net["value"] = pd.to_numeric(net["value"], errors="coerce").astype(float)
-
                     sub["key_year"] = sub["year"].astype(int)
                     merge = refined.rename(columns={"value": "primary_refined_output"}).copy()
-                    if net is not None:
-                        merge = merge.merge(
-                            net.rename(columns={"value": "primary_refined_net_imports"}),
-                            on=["year", "material", "region"],
-                            how="left",
-                        )
-                        merge["primary_refined_net_imports"] = merge["primary_refined_net_imports"].fillna(0.0)
-                    else:
-                        merge["primary_refined_net_imports"] = 0.0
 
                     merged = merge.merge(
                         sub[
@@ -255,8 +229,7 @@ def validate_exogenous_inputs(cfg: RunConfig, *, repo_root: Path) -> List[str]:
                     if not merged.empty:
                         eps = 1.0e-12
                         avail = np.maximum(
-                            merged["primary_refined_output"].to_numpy(dtype=float)
-                            + merged["primary_refined_net_imports"].to_numpy(dtype=float),
+                            merged["primary_refined_output"].to_numpy(dtype=float),
                             0.0,
                         )
                         ry = np.maximum(merged["refining_yield"].to_numpy(dtype=float), eps)

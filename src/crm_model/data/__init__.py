@@ -9,8 +9,6 @@ from .io import (
     end_use_shares_te,
     load_primary_refined_output,
     primary_refined_output_tr,
-    load_primary_refined_net_imports,
-    primary_refined_net_imports_tr,
     load_stage_yields_losses,
     stage_yields_losses_t,
     load_collection_routing_rates,

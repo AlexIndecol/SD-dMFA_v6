@@ -311,12 +311,6 @@ def material_intensity_t(
 def load_primary_refined_output(path: str | Path) -> pd.DataFrame:
     return load_year_material_region_series(path, allow_negative=False)
 
-
-def load_primary_refined_net_imports(path: str | Path) -> pd.DataFrame:
-    # Net imports may be negative (net exporter), so negatives are valid.
-    return load_year_material_region_series(path, allow_negative=True)
-
-
 def load_stage_yields_losses(path: str | Path) -> pd.DataFrame:
     req = {
         "year",
@@ -428,21 +422,6 @@ def primary_refined_output_tr(
     for j, region in enumerate(regions):
         out[:, j] = series_t(refined_df, years=years, material=material, region=region, fill_method=fill_method)
     return out
-
-
-def primary_refined_net_imports_tr(
-    net_imp_df: pd.DataFrame,
-    *,
-    years: Sequence[int],
-    material: str,
-    regions: Sequence[str],
-    fill_method: str = "ffill",
-) -> np.ndarray:
-    out = np.zeros((len(years), len(regions)), dtype=float)
-    for j, region in enumerate(regions):
-        out[:, j] = series_t(net_imp_df, years=years, material=material, region=region, fill_method=fill_method)
-    return out
-
 
 def stage_yields_losses_t(
     stage_df: pd.DataFrame,

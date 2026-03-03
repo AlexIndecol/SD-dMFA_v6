@@ -195,16 +195,41 @@ Guardrails:
 
 ## 12) Incremental OD-trade calibration (endogenous trade vs exogenous OD data)
 
-When `trade_od.enabled=true`, calibrate trade-layer controls in a second stage after baseline stock calibration:
+When `trade_od.enabled=true`, calibrate trade-layer controls in a second stage after baseline stock calibration.
+This is a calibration/backtesting workflow against observed OD matrices, not a runtime input dependency.
 
 ```bash
 PYTHONPATH=src python scripts/calibration/calibrate_trade_od.py \
   --config configs/runs/mvp.yml \
+  --calibration-spec configs/calibration_trade.yml \
   --variant baseline \
-  --phase reporting \
-  --lambda-grid 0.1,0.2,0.3,0.4,0.5 \
-  --sd-cap-multiplier-grid 0.8,1.0,1.2
+  --phase reporting
 ```
+
+Policy defaults (grids/selection/output root) are read from:
+- `configs/calibration_trade.yml`
+
+`configs/calibration_trade.yml` now follows the same schema conventions as
+`configs/calibration.yml`:
+- `version`, `objective`, `windows`, `parameters`, `optimization`,
+  `selection`, `constraints`, `outputs`
+
+Trade-specific defaults are under:
+- `windows.fit.phase`
+- `parameters.trade_od.*.grid`
+- `selection.primary_metric` / `selection.fallback_metric`
+- `selection.constraints.max_abs_pct_bias`
+- `outputs.outdir`
+
+Runtime contract reminder:
+
+1. Runtime endogenous trade requires `trade_od_weights` (plus SD/MFA state).
+2. `trade_od_observed` and `trade_od_constraints` are calibration/evaluation utilities.
+
+Optional CLI overrides remain available for quick experiments:
+- `--lambda-grid`
+- `--sd-cap-multiplier-grid`
+- `--outdir`
 
 This writes:
 

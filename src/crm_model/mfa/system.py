@@ -19,9 +19,17 @@ class MFATimeseries:
     service_level: pd.Series
 
     primary_supply: pd.Series
-    primary_refined_net_imports: pd.Series
+    primary_refined_net_trade_endogenous: pd.Series
+    trade_refined_net_imports: pd.Series
+    trade_concentrate_net_imports: pd.Series
+    trade_scrap_net_imports: pd.Series
     primary_available_to_refining: pd.Series
     secondary_supply: pd.Series
+    refined_input_required_pre_cap: pd.Series
+    secondary_feed_gap_proxy: pd.Series
+    secondary_feed_surplus_proxy: pd.Series
+    upstream_concentrate_gap_refined_equiv_proxy: pd.Series
+    upstream_concentrate_surplus_refined_equiv_proxy: pd.Series
 
     inflow_to_use_total: pd.Series
     inflow_to_use_new: pd.Series
@@ -117,10 +125,20 @@ class SimpleMetalCycleWithReman(MFASystem):
                 "'primary_available_to_refining'."
             )
 
-        if "primary_refined_net_imports" in self.parameters:
-            primary_refined_net_imports = self.parameters["primary_refined_net_imports"].values.astype(float)
+        if "trade_refined_net_imports" in self.parameters:
+            trade_refined_net_imports = self.parameters["trade_refined_net_imports"].values.astype(float)
         else:
-            primary_refined_net_imports = np.zeros_like(primary_available)
+            trade_refined_net_imports = np.zeros_like(primary_available)
+        if "trade_concentrate_net_imports" in self.parameters:
+            trade_concentrate_net_imports = self.parameters["trade_concentrate_net_imports"].values.astype(float)
+        else:
+            trade_concentrate_net_imports = np.zeros_like(primary_available)
+        if "trade_scrap_net_imports" in self.parameters:
+            trade_scrap_net_imports = self.parameters["trade_scrap_net_imports"].values.astype(float)
+        else:
+            trade_scrap_net_imports = np.zeros_like(primary_available)
+        concentrate_to_refined_coeff = self._param_t("concentrate_to_refined_coeff", 1.0)
+        scrap_to_secondary_coeff = self._param_t("scrap_to_secondary_coeff", 1.0)
 
         # Stage yields/loss routing: explicit and exogenous.
         extraction_yield = self._param_t("extraction_yield", 1.0)
@@ -199,6 +217,13 @@ class SimpleMetalCycleWithReman(MFASystem):
         beneficiation_losses_to_disposal = np.zeros((t_len, r_len, e_len))
         refining_losses_to_sysenv = np.zeros((t_len, r_len, e_len))
         refining_losses_to_disposal = np.zeros((t_len, r_len, e_len))
+        refined_input_required_pre_cap = np.zeros((t_len, r_len, e_len))
+        secondary_feed_gap_proxy = np.zeros((t_len, r_len, e_len))
+        secondary_feed_surplus_proxy = np.zeros((t_len, r_len, e_len))
+        upstream_concentrate_gap_refined_equiv_proxy = np.zeros((t_len, r_len, e_len))
+        upstream_concentrate_surplus_refined_equiv_proxy = np.zeros((t_len, r_len, e_len))
+        scrap_trade_imports_effective = np.zeros((t_len, r_len, e_len))
+        scrap_trade_exports_effective = np.zeros((t_len, r_len, e_len))
 
         stockpile_inflow = np.zeros((t_len, r_len, e_len))
         stockpile_outflow = np.zeros((t_len, r_len, e_len))
@@ -237,6 +262,10 @@ class SimpleMetalCycleWithReman(MFASystem):
         }.items():
             if (arr < 0).any() or (arr > 1).any():
                 raise ValueError(f"{name} must be in [0, 1].")
+        if (concentrate_to_refined_coeff <= 0).any():
+            raise ValueError("concentrate_to_refined_coeff must be > 0.")
+        if (scrap_to_secondary_coeff <= 0).any():
+            raise ValueError("scrap_to_secondary_coeff must be > 0.")
 
         if not np.allclose(
             sorting_reject_to_disposal_share + sorting_reject_to_sysenv_share,
@@ -310,8 +339,33 @@ class SimpleMetalCycleWithReman(MFASystem):
 
             remaining_for_new = np.maximum(desired_inflow - inflow_reman[i], 0.0)
             required_input = remaining_for_new / np.maximum(fab_yield[i], eps)
+            refined_input_required_pre_cap[i] = required_input
 
             available_for_secondary = stockpile_state + recycled_secondary[i]
+            trade_scrap_row = trade_scrap_net_imports[i] * scrap_to_secondary_coeff[i]
+            trade_scrap_alloc = np.zeros((r_len, e_len), dtype=float)
+            for r_idx in range(r_len):
+                basis = required_input[r_idx, :]
+                basis_sum = float(np.sum(basis))
+                if basis_sum > 0:
+                    share_row = basis / basis_sum
+                else:
+                    share_row = np.full(e_len, 1.0 / max(e_len, 1), dtype=float)
+                trade_scrap_alloc[r_idx, :] = share_row * trade_scrap_row[r_idx]
+
+                import_amt = max(float(trade_scrap_row[r_idx]), 0.0)
+                export_amt = max(float(-trade_scrap_row[r_idx]), 0.0)
+                import_alloc = share_row * import_amt
+                export_alloc = share_row * min(export_amt, float(np.sum(np.maximum(available_for_secondary[r_idx], 0.0))))
+                scrap_trade_imports_effective[i, r_idx, :] = import_alloc
+                scrap_trade_exports_effective[i, r_idx, :] = export_alloc
+                available_for_secondary[r_idx, :] = np.maximum(
+                    available_for_secondary[r_idx, :] - export_alloc,
+                    0.0,
+                ) + import_alloc
+
+            secondary_feed_gap_proxy[i] = np.maximum(required_input - available_for_secondary, 0.0)
+            secondary_feed_surplus_proxy[i] = np.maximum(available_for_secondary - required_input, 0.0)
             secondary_release_cap = available_for_secondary * stockpile_release_rate[i]
 
             reserve_on = strategic_reserve_enabled[i] > 0.5
@@ -346,14 +400,22 @@ class SimpleMetalCycleWithReman(MFASystem):
             for r_idx in range(r_len):
                 if need_total[r_idx] > 0:
                     share[r_idx, :] = remaining_input[r_idx, :] / need_total[r_idx]
+                elif remaining_primary_cap[r_idx] > 0:
+                    share[r_idx, :] = np.full(e_len, 1.0 / max(e_len, 1), dtype=float)
 
             primary_total_used_for_demand = np.minimum(remaining_primary_cap, need_total)
             primary_used[i] = share * primary_total_used_for_demand[:, None]
             primary_total_withdrawn[i] = primary_used[i] + primary_diverted_to_strategic[i]
+            primary_surplus_total = np.maximum(remaining_primary_cap - need_total, 0.0)
+            upstream_concentrate_surplus_refined_equiv_proxy[i] = share * primary_surplus_total[:, None]
 
             input_shortfall = np.maximum(required_input - (secondary_used[i] + primary_used[i]), 0.0)
             strategic_release_cap = np.maximum(release_intent_i * strategic_inventory_state, 0.0)
             strategic_release_to_fabrication[i] = np.minimum(strategic_release_cap, input_shortfall)
+            upstream_concentrate_gap_refined_equiv_proxy[i] = np.maximum(
+                input_shortfall - strategic_release_to_fabrication[i],
+                0.0,
+            )
             strategic_inventory_inflow[i] = secondary_diverted_to_strategic[i] + primary_diverted_to_strategic[i]
             strategic_inventory_outflow[i] = strategic_release_to_fabrication[i]
             strategic_inventory_state = np.maximum(
@@ -362,7 +424,11 @@ class SimpleMetalCycleWithReman(MFASystem):
             )
             strategic_inventory_stock[i] = strategic_inventory_state
 
-            stockpile_outflow[i] = secondary_used[i] + secondary_diverted_to_strategic[i]
+            stockpile_outflow[i] = (
+                secondary_used[i]
+                + secondary_diverted_to_strategic[i]
+                + scrap_trade_exports_effective[i]
+            )
 
             # Upstream chain reconstruction from refining anchor.
             ry = max(refining_yield[i], eps)
@@ -399,7 +465,11 @@ class SimpleMetalCycleWithReman(MFASystem):
             new_scrap_to_secondary[i] = new_scrap_generated[i] * new_scrap_to_secondary_share[i]
             new_scrap_to_residue[i] = new_scrap_generated[i] - new_scrap_to_secondary[i]
 
-            stockpile_inflow[i] = recycled_secondary[i] + new_scrap_to_secondary[i]
+            stockpile_inflow[i] = (
+                recycled_secondary[i]
+                + new_scrap_to_secondary[i]
+                + scrap_trade_imports_effective[i]
+            )
             stockpile_state = np.maximum(stockpile_state + stockpile_inflow[i] - stockpile_outflow[i], 0.0)
             stockpile_stock[i] = stockpile_state
 
@@ -669,8 +739,18 @@ class SimpleMetalCycleWithReman(MFASystem):
         self.parameters["__service_demand"].values = service_demand
         self.parameters["__delivered_service"].values = inflow_total
         self.parameters["__unmet_service"].values = unmet_service
-        self.parameters["__primary_refined_net_imports"].values = np.repeat(
-            primary_refined_net_imports[:, :, None],
+        self.parameters["__trade_refined_net_imports"].values = np.repeat(
+            trade_refined_net_imports[:, :, None],
+            e_len,
+            axis=2,
+        )
+        self.parameters["__trade_concentrate_net_imports"].values = np.repeat(
+            trade_concentrate_net_imports[:, :, None],
+            e_len,
+            axis=2,
+        )
+        self.parameters["__trade_scrap_net_imports"].values = np.repeat(
+            trade_scrap_net_imports[:, :, None],
             e_len,
             axis=2,
         )
@@ -681,6 +761,15 @@ class SimpleMetalCycleWithReman(MFASystem):
         )
         self.parameters["__primary_supply_used"].values = primary_used
         self.parameters["__secondary_supply_used"].values = secondary_used
+        self.parameters["__refined_input_required_pre_cap"].values = refined_input_required_pre_cap
+        self.parameters["__secondary_feed_gap_proxy"].values = secondary_feed_gap_proxy
+        self.parameters["__secondary_feed_surplus_proxy"].values = secondary_feed_surplus_proxy
+        self.parameters["__upstream_concentrate_gap_refined_equiv_proxy"].values = (
+            upstream_concentrate_gap_refined_equiv_proxy
+        )
+        self.parameters["__upstream_concentrate_surplus_refined_equiv_proxy"].values = (
+            upstream_concentrate_surplus_refined_equiv_proxy
+        )
         self.parameters["__eol_disposal"].values = disposal_inflow_total
 
         self.parameters["__fabrication_losses"].values = new_scrap_generated

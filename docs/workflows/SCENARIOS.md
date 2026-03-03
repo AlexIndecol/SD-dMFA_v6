@@ -209,7 +209,10 @@ Collection-rate shock implementation is SD-native:
 - `demand_surge`
 - `recycling_disruption`
 - `primary_refined_output`
-- `primary_refined_net_imports`
+- `trade_refined_import_need_multiplier`
+- `trade_concentrate_import_need_multiplier`
+- `trade_scrap_import_need_multiplier`
+- `trade_export_capacity_multiplier`
 - `extraction_yield`
 - `beneficiation_yield`
 - `refining_yield`

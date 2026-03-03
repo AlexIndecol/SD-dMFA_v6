@@ -34,10 +34,10 @@ def test_repo_layout_scaffold_files_exist():
         root / "configs" / "stages.yml",
         root / "configs" / "qualities.yml",
         root / "configs" / "trade.yml",
-        root / "configs" / "trade_od.yml",
         root / "configs" / "runs" / "_core.yml",
         root / "configs" / "runs" / "mvp.yml",
         root / "configs" / "runs" / "r-strategies.yml",
+        root / "configs" / "calibration_trade.yml",
         root / "configs" / "scenarios" / "mvp" / "demand_surge.yml",
         root / "configs" / "scenarios" / "mvp" / "recycling_disruption.yml",
         root / "configs" / "scenarios" / "mvp" / "combined_shocks.yml",
@@ -153,8 +153,11 @@ def test_dimensions_symbols_and_stage_stock_config_are_loaded():
     assert cfg.dimensions.origin_regions == []
     assert cfg.dimensions.destination_regions == []
     assert cfg.trade_od.enabled is False
+    assert cfg.trade_od.runtime_mode == "endogenous"
+    assert cfg.trade_od.activation_phases == ["calibration", "reporting"]
     assert cfg.trade_od.commodities == ["concentrates", "refined_metal", "scrap"]
-    assert float(cfg.trade_od.capacity_cap_sd_multiplier) == 1.0
+    assert float(cfg.trade_od.capacity_cap_sd_multiplier) == 1.2
+    assert str(cfg.trade_od.weight_extrapolation_policy) == "clamp_normalize"
 
     assert cfg.mfa_graph is not None
     stock_names = {s.name for s in cfg.mfa_graph.stocks}

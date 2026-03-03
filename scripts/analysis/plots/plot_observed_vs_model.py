@@ -413,13 +413,6 @@ def main() -> int:
             "indicator": "Stock_in_use",
             "ylabel": "Stock in use [t]",
         },
-        # Useful trade-side comparator: sign and magnitude of exogenous net imports vs modeled usage.
-        {
-            "observed_id": "primary_refined_net_imports",
-            "observed_var_key": "primary_refined_net_imports",
-            "indicator": "Primary_refined_net_imports",
-            "ylabel": "Net flow [t/year]",
-        },
         # Upstream diagnostics: compare observed stage series with stage-consistent modeled proxies.
         {
             "observed_id": "primary_refined_observed",

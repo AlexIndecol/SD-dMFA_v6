@@ -35,7 +35,6 @@ def _fill_year_panel(df: pd.DataFrame, value_cols: list[str], years: np.ndarray)
 def main() -> int:
     p = argparse.ArgumentParser(description="Build model-ready primary-chain exogenous inputs with reconciliation diagnostics.")
     p.add_argument("--primary-refined-output", default="data/exogenous/primary_refined_output.csv")
-    p.add_argument("--primary-refined-net-imports", default="data/exogenous/primary_refined_net_imports.csv")
     p.add_argument("--stage-yields-losses", default="data/exogenous/stage_yields_losses.csv")
     p.add_argument("--start-year", type=int, default=1870)
     p.add_argument("--end-year", type=int, default=2100)
@@ -44,11 +43,9 @@ def main() -> int:
     args = p.parse_args()
 
     refined_path = Path(args.primary_refined_output)
-    netimp_path = Path(args.primary_refined_net_imports)
     stage_path = Path(args.stage_yields_losses)
 
     refined = _read(refined_path, ["year", "material", "region", "value"]).copy()
-    netimp = _read(netimp_path, ["year", "material", "region", "value"]).copy()
     stage = _read(
         stage_path,
         [
@@ -67,7 +64,7 @@ def main() -> int:
         ],
     ).copy()
 
-    for df in [refined, netimp, stage]:
+    for df in [refined, stage]:
         df["year"] = pd.to_numeric(df["year"], errors="raise").astype(int)
         df["material"] = df["material"].astype(str).str.strip().str.lower()
         df["region"] = df["region"].astype(str).str.strip()
@@ -75,7 +72,6 @@ def main() -> int:
     years = np.arange(int(args.start_year), int(args.end_year) + 1, dtype=int)
 
     refined_full = _fill_year_panel(refined, ["value"], years)
-    netimp_full = _fill_year_panel(netimp, ["value"], years)
     stage_cols = [
         "extraction_yield",
         "beneficiation_yield",
@@ -97,20 +93,13 @@ def main() -> int:
     stage_full["sorting_reject_to_disposal_share"] = stage_full["sorting_reject_to_disposal_share"] / reject_sum
     stage_full["sorting_reject_to_sysenv_share"] = stage_full["sorting_reject_to_sysenv_share"] / reject_sum
 
-    merged = (
-        refined_full.rename(columns={"value": "primary_refined_output"})
-        .merge(
-            netimp_full.rename(columns={"value": "primary_refined_net_imports"}),
-            on=["year", "material", "region"],
-            how="left",
-        )
-        .merge(stage_full, on=["year", "material", "region"], how="left")
+    merged = refined_full.rename(columns={"value": "primary_refined_output"}).merge(
+        stage_full, on=["year", "material", "region"], how="left"
     )
-    merged["primary_refined_net_imports"] = merged["primary_refined_net_imports"].fillna(0.0)
 
     eps = 1.0e-12
     merged["primary_available_to_refining"] = np.maximum(
-        merged["primary_refined_output"] + merged["primary_refined_net_imports"],
+        merged["primary_refined_output"],
         0.0,
     )
     merged["refining_input_primary"] = merged["primary_available_to_refining"] / np.maximum(merged["refining_yield"], eps)
@@ -137,12 +126,11 @@ def main() -> int:
 
     if args.write_model_ready:
         refined_full[["year", "material", "region", "value"]].to_csv(refined_path, index=False)
-        netimp_full[["year", "material", "region", "value"]].to_csv(netimp_path, index=False)
         stage_full[["year", "material", "region", *stage_cols]].to_csv(stage_path, index=False)
 
     print(f"Wrote diagnostics: {out_dir / 'primary_chain_reconciliation.csv'}")
     if args.write_model_ready:
-        print(f"Updated model-ready files: {refined_path}, {netimp_path}, {stage_path}")
+        print(f"Updated model-ready files: {refined_path}, {stage_path}")
     else:
         print("Model-ready file overwrite disabled (use --write-model-ready).")
 

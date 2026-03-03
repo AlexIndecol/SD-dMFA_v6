@@ -1,0 +1,56 @@
+# Interface Contract: Trade Calibration Policy
+#
+# Section 1) Scope
+# - Controls OD-trade calibration objective, windows, parameter search space,
+#   selection rules, constraints, and outputs for
+#   scripts/calibration/calibrate_trade_od.py.
+#
+# Section 2) Required top-level keys
+# - version, objective, windows, parameters, optimization, selection,
+#   constraints, outputs.
+#
+version: 1
+
+objective:
+  id: trade_od_flow_fit
+  description: >
+    Minimize OD trade-flow mismatch between constrained endogenous allocation
+    and observed exogenous OD matrices.
+  target_source: trade_od_observed
+
+windows:
+  fit:
+    phase: reporting
+    # Optional absolute year clipping on top of the chosen phase horizon.
+    # Keep null to use full phase years from run config.
+    start_year: null
+    end_year: null
+
+parameters:
+  trade_od:
+    coupling_relax_lambda_0_1:
+      path: trade_od.coupling_relax_lambda_0_1
+      grid: [0.1, 0.2, 0.3, 0.4, 0.5]
+    capacity_cap_sd_multiplier:
+      path: trade_od.capacity_cap_sd_multiplier
+      grid: [0.8, 1.0, 1.2]
+
+optimization:
+  grid_search:
+    method: cartesian
+
+selection:
+  # Allowed metrics: rmse, mae, abs_pct_bias, pct_bias
+  primary_metric: rmse
+  fallback_metric: mae
+  constraints:
+    # Set to null to disable threshold gating.
+    max_abs_pct_bias: null
+
+constraints:
+  hard:
+    - "0 <= trade_od.coupling_relax_lambda_0_1 <= 1"
+    - "trade_od.capacity_cap_sd_multiplier > 0"
+
+outputs:
+  outdir: outputs/runs/calibration/trade_od
