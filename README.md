@@ -21,7 +21,9 @@ Starter repository for building a **coupled dynamic Material Flow Analysis (dMFA
 - dMFA stages/links/stocks are defined in `configs/stages.yml` (process names can be renamed via roles)
 
 Documentation entrypoint: `docs/README.md`.
-See `docs/governance/DECISION_LOG.md` for decisions, `docs/workflows/SCENARIOS.md` for scenario implementation rules, `docs/workflows/CALIBRATION.md` for calibration clarifications, and `docs/governance/ASSUMPTIONS.md` for open assumptions.
+Canonical governance source: `docs/governance/MODEL_GOVERNANCE.md`.
+See `docs/workflows/SCENARIOS.md` for scenario implementation rules and `docs/workflows/CALIBRATION.md` for calibration clarifications.
+See `docs/model/VARIABLES_AND_PARAMETERS.md` for the canonical taxonomy of exogenous variables, endogenous variables, and parameters.
 
 ## Requirements
 
@@ -172,7 +174,7 @@ Schemas are documented in `data/README.md` and enforced by `registry/variable_re
 - `configs/scenarios/mvp/*.yml` – scenario-file sets loaded via `includes.scenarios`
 - `configs/runs/mvp.yml` – thin overlay run config (`extends: ./_core.yml`)
 - `configs/regions.yml`, `configs/materials.yml`, `configs/end_use.yml`, `configs/stages.yml`, `configs/qualities.yml` – split-layout single sources
-- `configs/trade.yml` – trade dimensions plus optional `trade_od` allocator controls (default disabled)
+- `configs/trade.yml` – trade dimensions plus `trade_od` allocator controls (endogenous mode enabled by default)
 - `registry/` – exogenous variable registry (file paths + schema)
 - `data/exogenous/` – exogenous inputs (one variable per file)
 - `data/raw/`, `data/processed/`, `data/external/` – data-lake scaffold for future ingestion/ETL separation
@@ -190,8 +192,8 @@ Schemas are documented in `data/README.md` and enforced by `registry/variable_re
 - `outputs/analysis/` – derived comparisons and figures
 - `docs/` – documentation hub and structured subfolders:
   - `docs/getting-started/` (quickstart, troubleshooting)
-  - `docs/model/` (architecture, SD loop, indicators, outputs, glossary, flowchart)
-  - `docs/workflows/` (scenarios, calibration, config precedence)
-  - `docs/governance/` (assumptions, risks, decision log, changelog)
+  - `docs/model/` (architecture, module deep-dives, indicators, glossary, variables/parameters taxonomy, flowchart)
+  - `docs/workflows/` (configs, scenarios, calibration)
+  - `docs/governance/` (model governance, risks, changelog)
   - `docs/internal/` (agent playbook)
 - `tests/` – smoke tests

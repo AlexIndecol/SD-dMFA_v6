@@ -245,11 +245,11 @@ class CouplingConfig(BaseModel):
 
 
 class TradeODConfig(BaseModel):
-    enabled: bool = False
+    enabled: bool = True
     observed_flow_source: Optional[str] = "trade_od_observed"
     weights_source: str = "trade_od_weights"
     constraints_source: Optional[str] = "trade_od_constraints"
-    runtime_mode: Literal["endogenous", "legacy_sidecar"] = "endogenous"
+    runtime_mode: Literal["endogenous"] = "endogenous"
     activation_phases: List[Literal["calibration", "reporting"]] = Field(
         default_factory=lambda: ["calibration", "reporting"]
     )
@@ -261,9 +261,6 @@ class TradeODConfig(BaseModel):
     )
     concentrate_to_refined_coeff: float = 1.0
     scrap_to_secondary_coeff: float = 1.0
-    historical_window_start_year: int = 1995
-    historical_window_end_year: int = 2024
-    fallback_mode_outside_window: Literal["legacy_net_import_balance"] = "legacy_net_import_balance"
     rolling_weight_window_years: int = 3
     allocator_max_reallocation_passes: int = 1
     capacity_cap_hybrid_mode: Literal["min_empirical_sd", "empirical_only", "sd_only"] = "min_empirical_sd"
@@ -271,6 +268,29 @@ class TradeODConfig(BaseModel):
     capacity_cap_empirical_quantile: float = 0.75
     capacity_cap_empirical_window_years: int = 5
     coupling_relax_lambda_0_1: float = 0.30
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_removed_trade_od_keys(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        removed_keys = {
+            "historical_window_start_year",
+            "historical_window_end_year",
+            "fallback_mode_outside_window",
+        }
+        present = sorted(list(removed_keys.intersection(set(data.keys()))))
+        if present:
+            raise ValueError(
+                "Removed trade_od key(s) are no longer supported: "
+                f"{present}. Remove them from config and use endogenous OD runtime defaults."
+            )
+        if str(data.get("runtime_mode", "endogenous")) == "legacy_sidecar":
+            raise ValueError(
+                "trade_od.runtime_mode='legacy_sidecar' has been removed. "
+                "Use trade_od.runtime_mode='endogenous'."
+            )
+        return data
 
     @model_validator(mode="after")
     def _validate_trade_od(self) -> "TradeODConfig":
@@ -292,10 +312,6 @@ class TradeODConfig(BaseModel):
             raise ValueError("trade_od.concentrate_to_refined_coeff must be > 0.")
         if self.scrap_to_secondary_coeff <= 0:
             raise ValueError("trade_od.scrap_to_secondary_coeff must be > 0.")
-        if self.historical_window_end_year < self.historical_window_start_year:
-            raise ValueError(
-                "trade_od.historical_window_end_year must be >= historical_window_start_year."
-            )
         if self.rolling_weight_window_years <= 0:
             raise ValueError("trade_od.rolling_weight_window_years must be > 0.")
         if self.allocator_max_reallocation_passes < 0:

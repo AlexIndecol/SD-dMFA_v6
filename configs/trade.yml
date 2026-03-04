@@ -1,14 +1,5 @@
-# Interface Contract: Trade Dimensions and Aliases
-#
-# Section 1) Scope
-# - Optional trade-axis definitions for commodity/origin/destination dimensions.
-# - OD allocator controls are co-located under top-level key `trade_od`.
-#
-# Section 2) Required keys
-# - commodity_dimension, origin_region_dimension, destination_region_dimension
-# - trade_aliases, commodities, origin_regions, destination_regions
-#
-# For instance concentrate, refined metal, scrap, etc..
+# Optional trade dimensions used by OD-trade workflows.
+# These dimensions alias core region dimension `r` through `trade_aliases`.
 commodity_dimension:
   name: commodity
   symbol: c
@@ -24,67 +15,61 @@ destination_region_dimension:
   alias_of: r
 
 # Explicit alias mapping for OD regions to the core region dimension.
+# Keep these aliases aligned with loader expectations.
 trade_aliases:
   origin_region: r
   destination_region: r
 
 # Optional members to be populated when OD trade-flow modules are added.
+# Keep empty in baseline unless explicit OD dimensions are needed in reporting.
 commodities: []
 origin_regions: []
 destination_regions: []
 
-# Interface Contract: OD Trade Allocator Controls
-#
-# Section 1) Scope
-# - Incremental OD trade layer driven by exogenous observed matrices and
-#   constrained by empirical + SD-derived export ceilings.
-#
-# Section 2) Required keys
-# - enabled
-# - weights_source
-# - commodities
-# - runtime_mode, activation_phases
-# - outer_trade_max_iter, outer_trade_convergence_tol
-# - weight_extrapolation_policy
-# - allocator_max_reallocation_passes
-# - capacity_cap_hybrid_mode
-# - capacity_cap_sd_multiplier
-# - coupling_relax_lambda_0_1
-# - concentrate_to_refined_coeff, scrap_to_secondary_coeff
-#
-# Section 3) Allowed values and constraints
-# - fallback_mode_outside_window: legacy_net_import_balance
+# OD allocator notes:
 # - capacity_cap_hybrid_mode: min_empirical_sd | empirical_only | sd_only
-# - coupling_relax_lambda_0_1 in [0,1]
+# - coupling_relax_lambda_0_1 must stay in [0, 1]
+# - refined availability in endogenous mode uses:
+#   primary + refined net imports + concentrate_to_refined_coeff * concentrate net imports
 trade_od:
-  enabled: false
+  # Master switch for OD trade layer.
+  enabled: true
 
+  # Sources declared in registry/variable_registry.yml.
   observed_flow_source: trade_od_observed
   weights_source: trade_od_weights
   constraints_source: trade_od_constraints
+  # Runtime mode is now endogenous-only.
   runtime_mode: endogenous
+  # Phases where OD layer is active.
   activation_phases: [calibration, reporting]
+  # Outer loop controls for OD convergence.
   outer_trade_max_iter: 6
   outer_trade_convergence_tol: 0.001
+  # Extrapolates missing years and re-normalizes weights.
   weight_extrapolation_policy: clamp_normalize
 
+  # Commodity channels solved by allocator.
   commodities:
     - concentrates
     - refined_metal
     - scrap
+  # Coefficients converting commodity-equivalent flows into modeled supply channels.
   concentrate_to_refined_coeff: 1.0
   scrap_to_secondary_coeff: 1.0
 
-  historical_window_start_year: 1995
-  historical_window_end_year: 2024
-  fallback_mode_outside_window: legacy_net_import_balance
-
+  # Smoothing window for weights and number of reallocation passes.
   rolling_weight_window_years: 3
   allocator_max_reallocation_passes: 1
 
+  # Capacity cap mix:
+  # - empirical component from observed exports,
+  # - SD component from capacity envelope diagnostics.
   capacity_cap_hybrid_mode: min_empirical_sd
   capacity_cap_sd_multiplier: 1.2
   capacity_cap_empirical_quantile: 0.75
   capacity_cap_empirical_window_years: 5
 
+  # Relaxation in OD coupling loop.
+  # next = lambda * target + (1-lambda) * previous
   coupling_relax_lambda_0_1: 0.50

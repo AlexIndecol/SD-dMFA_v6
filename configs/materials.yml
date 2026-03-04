@@ -1,22 +1,12 @@
-# Interface Contract: Material Dimension
-#
-# Section 1) Scope
-# - Canonical material list used across SD, MFA, coupling, and exogenous inputs.
-#
-# Section 2) Required keys
-# - dimension: {name, symbol}
-# - materials: non-empty list of material entries.
-#
-# Section 3) Entry guidance
-# - Keep material ids stable; optional metadata fields (for example unit)
-#   should remain consistent with exogenous datasets.
-
+# Canonical material dimension used across SD, dMFA, scenarios, and registry inputs.
 dimension:
   name: material
   symbol: m
 
+# Keep material names stable; scenario filters and CSV rows depend on exact ids.
 materials:
   - name: tin
+    # Reporting unit expected in most outputs and exogenous drivers.
     unit: t
   - name: zinc
     unit: t

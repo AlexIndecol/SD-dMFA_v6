@@ -1,19 +1,11 @@
-# Interface Contract: MFA Process Graph
-#
-# Section 1) Scope
-# - Defines stage taxonomy, process nodes, native stocks, and inter-process flows.
-#
-# Section 2) Required keys
-# - dimension, stages, processes, stocks, flows, constraints.
-#
-# Section 3) Structural rules
-# - Flows and stocks must reference declared process names.
-# - Required process roles and required native stocks must be present.
-#
+# Canonical process-graph definition for the dMFA layer.
+# This file defines stage labels, process roles, native stocks, and allowed flows.
 dimension:
   name: stage
   symbol: p
 
+# Stage labels are descriptive taxonomy labels.
+# Runtime behavior is controlled by process roles below.
 stages:
   - primary_extraction
   - beneficiation_concentration
@@ -27,6 +19,8 @@ stages:
   - residue_treatment_disposal
   - sysenv
 
+# Process nodes and semantic roles.
+# Role names are used by model builders to attach equations and routing logic.
 processes:
   - {id: 0, name: sysenv,                       role: source}
   - {id: 1, name: primary_extraction,            role: primary_extraction}
@@ -40,11 +34,17 @@ processes:
   - {id: 9, name: recycling_refining_secondary,  role: recycling}
   - {id: 10, name: residue_treatment_disposal,   role: disposal}
 
+# Native stocks physically tracked inside the modeled boundary.
+# `stock_in_use`: active service stock.
+# `refinery_stockpile_native`: operational secondary buffer.
+# `strategic_inventory_native`: policy reserve inventory.
 stocks:
   - {name: stock_in_use, process: use, dim_letters: [t, r, e], role: use_stock_native}
   - {name: refinery_stockpile_native, process: refining, dim_letters: [t, r, e], role: refinery_stockpile_native}
   - {name: strategic_inventory_native, process: refining, dim_letters: [t, r, e], role: strategic_inventory_native}
 
+# Allowed directed flows between processes.
+# Most flows are `[t, r, e]`, meaning each flow is tracked by year, region, and end use.
 flows:
   - {from: sysenv,                      to: primary_extraction,            dim_letters: [t, r, e]}
   - {from: primary_extraction,          to: beneficiation_concentration,   dim_letters: [t, r, e]}
@@ -73,6 +73,8 @@ flows:
   - {from: remanufacturing,             to: sysenv,                         dim_letters: [t, r, e]}
   - {from: residue_treatment_disposal,  to: sysenv,                         dim_letters: [t, r, e]}
 
+# Structural checks applied by validators/loaders.
+# These guard against missing roles, disconnected flows, and invalid stock declarations.
 constraints:
   - "Each required role must appear exactly once in processes."
   - "Each required native stock (stock_in_use, refinery_stockpile_native, strategic_inventory_native) must be declared once."

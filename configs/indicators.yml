@@ -1,18 +1,7 @@
-# Interface Contract: Indicator Registry
-#
-# Section 1) Scope
-# - Declares exported indicators and logical subsets used in reporting.
-#
-# Section 2) Required groups
-# - mfa_state_and_flow_metrics
-# - resilience_service_indicators
-# - service_risk
-#
-# Section 3) Group schema
-# - indicators: list[str]
-# - logical_subsets (optional): mapping subset_name -> list[str]
-#
+# Indicator registry for exported time series and scalar metrics.
+# Keep names stable because plotting/analysis scripts depend on exact ids.
 mfa_state_and_flow_metrics:
+  # Core state and flow outputs from dMFA and trade integration.
   indicators:
     - Stock_in_use
     - Inflow_to_use_total
@@ -61,6 +50,7 @@ mfa_state_and_flow_metrics:
     - EoL_RR
     - RIR
   logical_subsets:
+    # Subsets are plotting/reporting groups only (no runtime behavior change).
     stocks_and_use_phase:
       - Stock_in_use
       - Inflow_to_use_total
@@ -115,6 +105,7 @@ mfa_state_and_flow_metrics:
       - Mass_balance_residual_max_abs
 
 resilience_service_indicators:
+  # Service outcomes, coupling diagnostics, supplier-risk metrics, and resilience scalars.
   indicators:
     - Service_demand
     - Delivered_service
@@ -145,6 +136,7 @@ resilience_service_indicators:
     - Years_below_service_threshold
     - Max_consecutive_years_below_threshold
   logical_subsets:
+    # Grouping used by reporting and dashboard scripts.
     service_outcomes:
       - Service_demand
       - Delivered_service
@@ -180,4 +172,5 @@ resilience_service_indicators:
 
 service_risk:
   # Threshold used for threshold-based resilience metrics.
+  # Years with Service_level < threshold are counted in downside-risk scalars.
   threshold_service_level: 0.95

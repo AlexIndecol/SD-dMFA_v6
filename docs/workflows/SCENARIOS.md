@@ -1,86 +1,42 @@
-# Scenario Definitions
+# Scenario Variants: Definition and Execution Guide
 
-This document explains how scenario variants are defined and executed.
+This document explains how scenario variants are defined and executed in the current model runtime.
 
-For full contracts across all config files (not only scenarios), use the inline `#`
-interface-contract comments at the top of each YAML file in `configs/` and
-`registry/variable_registry.yml`.
+Use this file when you need to understand scenario intent, runtime behavior, and operational usage with concrete examples from the live scenario packs.
 
-Related references:
+For full config contracts across all config files, use:
+`docs/workflows/CONFIGS.md`.
 
-- `docs/workflows/CONFIG_PRECEDENCE.md`
-- `docs/getting-started/TROUBLESHOOTING.md`
-- `docs/model/SD_CAPACITY_SCARCITY_PRICE_LOOP.md`
+## Document position
 
-## Config structure
+- You are here: Tier 2 canonical workflow reference for scenario variants.
+- Canonical scope: variant definition, runtime resolution order, and operational examples from active scenario packs.
+- Out of scope: full config contract definitions (kept in `CONFIGS.md`) and low-level module formula derivations.
+- Related docs: [CONFIGS.md](./CONFIGS.md), [ARCHITECTURE.md](../model/ARCHITECTURE.md), [COUPLING_LOGIC.md](../model/COUPLING_LOGIC.md), [SD_MODEL.md](../model/SD_MODEL.md), [MFA_MODEL.md](../model/MFA_MODEL.md), [OD_TRADE_MODULE.md](../model/OD_TRADE_MODULE.md), [INDICATORS.md](../model/INDICATORS.md), [TROUBLESHOOTING.md](../getting-started/TROUBLESHOOTING.md)
 
-Scenario variants can be loaded from scenario files via
-`includes.scenarios` (directory, single file, or `*.yml` glob), and/or
-declared inline in your run config under `variants:`.
+## 1) Purpose and reader outcomes
 
-When both are present, inline `variants` entries override file-based entries
-with the same variant name for backward-compatible transitions.
+After reading this page, you should be able to:
 
-Cross-cutting SD heterogeneity can be defined at top-level using:
+1. Understand how a scenario variant is represented in YAML.
+2. Understand how variant values are resolved and applied at runtime.
+3. Explain why each current scenario exists and what mechanism it is testing.
+4. Run a variant and know what outputs to inspect to verify behavior.
 
-- `sd_heterogeneity`: ordered material/region-scoped rules with `sd_parameters`.
-- Rules are applied per material-region slice before variant overrides.
-- Variant `sd_parameters` / `dimension_overrides[*].sd_parameters` still take precedence.
+## 2) How scenario variants are defined in config
 
-Useful SD coupling controls:
+Variants are defined in two places:
 
-- `coupling_service_stress_gain`: weight from service-stress coupling signal to SD stress multiplier.
-- `coupling_circular_supply_stress_gain`: weight from circular-supply-stress coupling signal to SD stress multiplier.
-- `coupling_signal_smoothing`: iterative smoothing factor applied to both coupling signals.
+1. Scenario files under `configs/scenarios/**/*.yml`.
+2. Inline `variants:` under a run config (`configs/runs/*.yml`).
 
-Each variant should provide:
-
-- `description`: what the scenario represents.
-- `implementation`: how the scenario is translated into model behavior.
-- optional global overrides:
-  - `sd_parameters`
-  - `mfa_parameters`
-  - `strategy`
-  - `transition_policy`
-  - `demand_transformation`
-  - `shocks`
-- optional `dimension_overrides`: material/region-scoped overrides.
-
-For `mfa_parameters` and `strategy`, overrides can be year-gated:
-
-```yaml
-strategy:
-  recycling_yield:
-    start_year: 2020
-    value: 0.9
-```
-
-Gate behavior: baseline values are used before `start_year`, and `value` is applied from `start_year` onward. This keeps historic years free of scenario overrides.
-
-## Scenario authoring workflow (recommended)
-
-1. Start from one mechanism and one target hypothesis.
-2. Use reporting-phase gates by default (`start_year >= report_start_year`).
-3. Apply the smallest override set needed to test that mechanism.
-4. Run baseline and scenario with identical run config.
-5. Validate convergence and mechanism movement before broadening scope.
-
-## Scenario authoring checklist
-
-### 1) Define objective and stress channel
-
-1. State the mechanism to excite (capacity bottlenecks, collection disruptions, reserve policy).
-2. Choose the smallest set of shocks/parameters needed to isolate that mechanism.
-
-### 2) Start from canonical schema
-
-Required keys:
+A scenario file must provide:
 
 - `name`
 - `description`
-- `implementation` (list)
+- `implementation`
 
-Optional blocks:
+A scenario file can additionally provide any of these override blocks:
 
 - `sd_parameters`
 - `mfa_parameters`
@@ -90,374 +46,559 @@ Optional blocks:
 - `shocks`
 - `dimension_overrides`
 
-Use YAML header contracts in each scenario file as source of truth.
+`dimension_overrides` is the slice-level mechanism. Each item can target:
 
-### 3) Respect temporal policy
+- `materials` (optional filter)
+- `regions` (optional filter)
+- local block overrides (`sd_parameters`, `mfa_parameters`, `strategy`, `transition_policy`, `demand_transformation`, `shocks`)
 
-1. Prefer reporting-phase starts (`start_year >= report_start_year`).
-2. Keep historic phase free of scenario behavior unless explicitly intended.
-3. For SD keys, use scalar/year-gate/full-timeseries forms consistently.
-4. Runtime guardrail: temporal scenario/profile overrides are reporting-phase enforced (pre-report years keep baseline values).
-5. Keep acute crisis events as discrete steps (`shocks.*`), but represent structural transitions as ramps.
-6. Structural controls that should be ramped in active scenario packs include:
-   - `mfa_parameters.collection_rate`, `mfa_parameters.sorting_yield`
-   - routing mix (`strategy.recycling_rate`, `strategy.remanufacturing_rate`, `strategy.disposal_rate`)
-   - yield/loop closure controls (`strategy.recycling_yield`, `strategy.reman_yield`, `strategy.new_scrap_to_secondary_share`)
+Practical point: if `materials` or `regions` is omitted in an override item, that item matches all values for the omitted dimension.
 
-### 4) Dimension override discipline
+## 3) How scenario variants are executed in runtime
 
-1. Use explicit `materials` and `regions` filters when behavior is slice-specific.
-2. Keep override count minimal and ordered intentionally.
-3. Avoid overlapping overrides unless precedence is deliberate and documented.
+This is the actual execution sequence in the current code path.
 
-### 5) Shock design checklist
+### 3.1 Variant loading
 
-1. Duration and multiplier should be plausible for the tested mechanism.
-2. Routing-rate shocks must preserve normalized triad semantics.
-3. Demand and supply shocks should not accidentally cancel each other.
+1. Run config is loaded.
+2. If `includes.scenarios` is set, scenario files are loaded first.
+3. Inline run-config `variants` are merged on top of file-based variants by name.
 
-### 6) SD parameter design checklist
+Operational implication: inline `variants.<name>` in a run file can override the same-name file variant.
 
-1. Change only parameters required for the hypothesis.
-2. Keep the first pass conservative; escalate stress before gain inflation.
-3. Record intended sign and expected direction in `implementation` bullets.
+### 3.2 Per-slice variant resolution
 
-### 7) Validation run
+For each material-region slice, runtime resolves the active variant in this order:
+
+1. Start from the variant global blocks.
+2. Apply matching `dimension_overrides` in file order.
+3. Keep block separation (`sd_parameters`, `mfa_parameters`, `strategy`, `transition_policy`, `demand_transformation`, `shocks`).
+
+Operational implication: when multiple `dimension_overrides` match the same slice, later items override earlier ones for overlapping keys.
+
+### 3.3 Scenario profile overlays (when enabled)
+
+If `scenario_profiles.enabled=true`, CSV-based profile payloads are built and merged on top of the resolved variant payload.
+
+Operational implication: profile payloads can overwrite variant values for the same path in reporting runs.
+
+### 3.4 Exogenous ramp resolution
+
+`exogenous_ramp` references are resolved per block and per slice.
+
+Operational implication: the same variant can produce different resolved time series by slice when profile files include material/region-scoped rows.
+
+### 3.5 Reporting-phase enforcement
+
+For reporting runs, runtime enforces reporting-window activation behavior:
+
+1. Shock events are clamped to `report_start_year` if configured earlier.
+2. Year-gated values are clamped to start no earlier than `report_start_year`.
+3. Certain runtime-impact scalars are converted to reporting-gated form.
+4. Missing `before` values are backfilled from baseline where applicable.
+
+Operational implication: a scenario that configures early-year changes can still execute as reporting-phase-only behavior unless intentionally configured otherwise.
+
+### 3.6 Final merge into run bases
+
+Resolved variant blocks are merged into run-level baseline blocks:
+
+- `sd_parameters`
+- `mfa_parameters`
+- `strategy`
+- `transition_policy`
+- `demand_transformation`
+- `shocks`
+
+Then the selected phase (`calibration`, `reporting`, `both`) executes.
+
+### 3.7 Phase behavior
+
+- Reporting phase receives scenario profile payloads when profiles are enabled.
+- Calibration phase does not apply profile payload overlays.
+
+### 3.8 OD trade interaction
+
+When endogenous OD runtime is enabled (`trade_od.runtime_mode=endogenous`), variant resolution happens inside the per-slice inner loop and is re-evaluated across outer OD iterations.
+
+Operational implication: variant shocks and overrides affect both local slice dynamics and the trade-constraint feedback loop.
+
+## 4) Current scenario catalog by variant family
+
+The current repository has 20 scenario-file variants:
+
+- Family A (`mvp`): 10 variants.
+- Family B (`r_strategies`): 10 variants.
+
+### 4.1 Family A: `mvp`
+
+#### `capacity_crunch_recovery`
+
+- Variant file: `configs/scenarios/mvp/capacity_crunch_recovery.yml`
+- Why it exists: stress-test endogenous scarcity-capacity-bottleneck recovery under prolonged supply pressure.
+- What it does: combines demand pressure with tighter primary and trade availability, then lets recovery emerge endogenously.
+- Blocks used: `sd_parameters`, `shocks`, `dimension_overrides`.
+- Time structure: acute window starts in 2025, duration 18 years.
+- Scope structure: global stress plus deeper nickel-EU27 stress.
+- Runtime execution notes: SD gains are intensified before SD normalization; shock channels are applied after base series load.
+- What to verify in outputs:
+  - `SD_bottleneck_pressure` rises in stress window.
+  - `Service_level` drops and later recovers.
+  - `Coupling_service_stress` and `Coupling_stress_multiplier` peak during stress.
+
+#### `circularity_push`
+
+- Variant file: `configs/scenarios/mvp/circularity_push.yml`
+- Why it exists: test an improvement pathway centered on circular loops rather than crisis shocks.
+- What it does: raises collection and circular conversion performance through ramps, with targeted nickel-EU27 reinforcement.
+- Blocks used: `mfa_parameters`, `strategy`, `dimension_overrides`.
+- Time structure: exogenous ramps from `data/ramp_profiles/mvp/circularity_push.csv`.
+- Scope structure: global improvements plus targeted EU27 nickel routing/collection reinforcement.
+- Runtime execution notes: ramp references are resolved per slice; routing keys are interpreted with routing-triad normalization behavior.
+- What to verify in outputs:
+  - `Collection_rate_effective`, `EoL_recycled`, `EoL_remanufactured` increase.
+  - `Secondary_supply` increases and `Primary_supply` pressure eases.
+
+#### `combined_shocks`
+
+- Variant file: `configs/scenarios/mvp/combined_shocks.yml`
+- Why it exists: represent realistic mixed stress where multiple channels hit different slices at once.
+- What it does: applies a global demand surge and adds layered regional/material shocks.
+- Blocks used: `shocks`, `dimension_overrides`.
+- Time structure: global and local shocks start in 2025 for 15 years.
+- Scope structure: global demand stress; deeper nickel-EU27 and zinc-China local stress.
+- Runtime execution notes: local override order matters where channels overlap.
+- What to verify in outputs:
+  - Compare `Unmet_service` and `Service_deficit` across affected slices.
+  - Confirm local stress slices move more than non-target slices.
+
+#### `demand_surge`
+
+- Variant file: `configs/scenarios/mvp/demand_surge.yml`
+- Why it exists: provide a clean demand-only stress baseline for comparison.
+- What it does: applies a harmonized demand shock window globally, with region-specific multipliers.
+- Blocks used: `shocks`, `dimension_overrides`.
+- Time structure: shock starts in 2025, duration 15 years.
+- Scope structure: global plus region-specific severity (`China`, `EU27`, `RoW`).
+- Runtime execution notes: same shock channel, different regional multipliers via dimension overrides.
+- What to verify in outputs:
+  - `Service_demand` rises according to configured severity pattern.
+  - `Service_level` and bottleneck indicators diverge by region.
+
+#### `demand_transformation_shift`
+
+- Variant file: `configs/scenarios/mvp/demand_transformation_shift.yml`
+- Why it exists: isolate demand-structure effects from transition-policy effects.
+- What it does: activates demand transformation, increases service activity, reduces intensity, adds bounded rebound.
+- Blocks used: `demand_transformation`, `shocks`, `dimension_overrides`.
+- Time structure:
+  - `enabled` gate from 2020 (`before: false`).
+  - demand-transformation parameter gates from 2025.
+  - supporting demand shock window from 2025 for 10 years.
+- Scope structure: global transformation + region-specific adjustments (China and EU27).
+- Runtime execution notes: demand transformation is applied before MFA flow execution for each slice.
+- What to verify in outputs:
+  - `Service_demand` and delivered-service metrics separate from baseline pattern.
+  - intensity-driven changes reduce pressure relative to equal-service baseline.
+
+#### `import_squeeze_circular_ramp`
+
+- Variant file: `configs/scenarios/mvp/import_squeeze_circular_ramp.yml`
+- Why it exists: test staged crisis-to-recovery logic with combined SD, policy, and demand-transformation levers.
+- What it does: starts with import/supply squeeze, then activates policy and efficiency response from 2028 onward.
+- Blocks used: `sd_parameters`, `transition_policy`, `demand_transformation`, `shocks`, `dimension_overrides`.
+- Time structure:
+  - stress shocks start in 2025 for 11 years.
+  - response controls ramp from 2028.
+  - mixed temporal forms (year-gated + exogenous ramp).
+- Scope structure: global stress/recovery with deeper nickel-EU27 squeeze and slower RoW policy response.
+- Runtime execution notes: this variant exercises most resolution layers (global blocks, dimension overrides, ramps, reporting clamp).
+- What to verify in outputs:
+  - early stress: higher `Coupling_service_stress`, lower `Service_level`.
+  - recovery period: improving `Coupling_circular_supply_stress` and lower bottleneck pressure.
+
+#### `recycling_disruption`
+
+- Variant file: `configs/scenarios/mvp/recycling_disruption.yml`
+- Why it exists: isolate circular-loop disruption effects and regional resilience differences.
+- What it does: applies global recycling disruption with regional severity differences and routing/trade stress.
+- Blocks used: `shocks`, `dimension_overrides`.
+- Time structure: start 2025, duration 15 years.
+- Scope structure: global disruption plus explicit EU27/China/RoW severity overrides.
+- Runtime execution notes: local shock sets include collection and routing channels to shape secondary-flow stress.
+- What to verify in outputs:
+  - declines in `EoL_recycled` and `Secondary_supply`.
+  - rising service stress in more severe regions.
+
+#### `strategic_reserve_build_release`
+
+- Variant file: `configs/scenarios/mvp/strategic_reserve_build_release.yml`
+- Why it exists: test strategic reserve policy behavior across build and release phases.
+- What it does: enables reserve controls, applies fill intent before crisis and release intent during demand/import stress.
+- Blocks used: `sd_parameters`, `strategy`, `shocks`, `dimension_overrides`.
+- Time structure: reserve controls and strategic smoothing gated from 2025; stress/release channels are staged.
+- Scope structure: global reserve behavior plus region/material-specific damping and priority buffering.
+- Runtime execution notes: strategic channels influence coupling through strategic coverage signals.
+- What to verify in outputs:
+  - `Strategic_inventory_stock` builds before crisis and declines during release.
+  - `Strategic_stock_coverage_years` and strategic intent indicators follow configured pattern.
+
+#### `surplus_build_drawdown`
+
+- Variant file: `configs/scenarios/mvp/surplus_build_drawdown.yml`
+- Why it exists: test buffer accumulation then natural drawdown behavior without introducing new structural modules.
+- What it does: combines lower demand pressure with stronger collection/routing in build phase, then allows drawdown after shocks end.
+- Blocks used: `sd_parameters`, `strategy`, `shocks`, `dimension_overrides`.
+- Time structure:
+  - build-oriented shock window from 2025 with long horizon.
+  - drawdown behavior after shock expiry.
+- Scope structure: global buffer pattern with nickel-EU27 priority intensification.
+- Runtime execution notes: collection multiplier bounds/lag tuning supports smoother build dynamics.
+- What to verify in outputs:
+  - stockpile and circular surplus diagnostics show build then drawdown pattern.
+  - service metrics stabilize when buffer is available.
+
+#### `transition_policy_acceleration`
+
+- Variant file: `configs/scenarios/mvp/transition_policy_acceleration.yml`
+- Why it exists: isolate transition-policy and adoption/compliance lag effects.
+- What it does: activates transition-policy and linked demand-transformation settings without explicit shock channels.
+- Blocks used: `transition_policy`, `demand_transformation`, `dimension_overrides`.
+- Time structure: policy enable gate at 2020; active intervention starts in 2026.
+- Scope structure: global policy acceleration plus nickel-EU27 front-runner override.
+- Runtime execution notes: this variant is useful for policy-loop testing under low shock noise.
+- What to verify in outputs:
+  - gradual service and bottleneck improvements aligned with adoption lag.
+  - sensitivity of recovery speed to regional front-runner settings.
+
+### 4.2 Family B: `r_strategies`
+
+The `r_strategies` family is organized as mechanism-specific intensity ladders.
+
+- R02 demand efficiency
+- R36 lifetime and remanufacturing
+- R79 recovery loops
+
+#### `r02_demand_efficiency` intensity ladder (`low`, `medium`, `high`)
+
+- Variant IDs:
+  - `r02_demand_efficiency_low`
+  - `r02_demand_efficiency_medium`
+  - `r02_demand_efficiency_high`
+- Variant files:
+  - `configs/scenarios/r_strategies/r02_demand_efficiency_low.yml`
+  - `configs/scenarios/r_strategies/r02_demand_efficiency_medium.yml`
+  - `configs/scenarios/r_strategies/r02_demand_efficiency_high.yml`
+- Why this grouped block exists: provide one comparable demand-efficiency ladder where only ambition level changes.
+- What this grouped block does: applies the same demand-efficiency mechanism (demand transformation + fabrication-yield improvements) at three intensity levels.
+- Blocks used across all three variants: `mfa_parameters`, `demand_transformation`, `dimension_overrides`.
+- Time structure across all three variants: year-gated activation from 2025 with demand-transformation `enabled` gate from 2020.
+- Scope structure across all three variants: regional differentiation across `EU27`, `China`, and `RoW`.
+- Runtime execution notes:
+  - Resolution path is identical across low/medium/high; only parameter intensity differs.
+  - This makes the three variants suitable for direct sensitivity comparison.
+- Intensity interpretation:
+  - `low`: modest demand moderation and efficiency gains.
+  - `medium`: stronger moderation than low with same mechanism structure.
+  - `high`: strongest demand and efficiency shift in the R02 track.
+- What to verify in outputs:
+  - monotonic movement in `Service_deficit` and stress indicators from low to high.
+  - same qualitative pattern by region, with stronger magnitude at higher intensity.
+
+#### `r36_lifetime_reman` intensity ladder (`low`, `medium`, `high`)
+
+- Variant IDs:
+  - `r36_lifetime_reman_low`
+  - `r36_lifetime_reman_medium`
+  - `r36_lifetime_reman_high`
+- Variant files:
+  - `configs/scenarios/r_strategies/r36_lifetime_reman_low.yml`
+  - `configs/scenarios/r_strategies/r36_lifetime_reman_medium.yml`
+  - `configs/scenarios/r_strategies/r36_lifetime_reman_high.yml`
+- Why this grouped block exists: provide one comparable lifetime/reman ladder where ambition increases without changing the mechanism family.
+- What this grouped block does: increases lifetime extension, reman routing, reman yield, and related policy support at three intensity levels.
+- Blocks used across all three variants: `sd_parameters`, `strategy`, `transition_policy`, `dimension_overrides`.
+- Time structure across all three variants: exogenous ramps from `r36_profiles.csv` plus transition-policy gating.
+- Scope structure across all three variants: region-specific adoption targets and policy tuning.
+- Runtime execution notes:
+  - Resolution structure is identical across low/medium/high; intensity values differ.
+  - This ladder is suitable for direct ambition-sensitivity comparison on reman/lifetime mechanisms.
+- Intensity interpretation:
+  - `low`: moderate lifetime and reman improvements with conservative policy support.
+  - `medium`: stronger lifetime/reman shift with higher policy ambition.
+  - `high`: strongest lifetime/reman and policy support settings in the R36 track.
+- What to verify in outputs:
+  - monotonic increase in reman-related outputs from low to high.
+  - progressively lower primary-pressure dependence as intensity increases.
+
+#### `r79_recovery_loops` intensity ladder (`low`, `medium`, `high`)
+
+- Variant IDs:
+  - `r79_recovery_loops_low`
+  - `r79_recovery_loops_medium`
+  - `r79_recovery_loops_high`
+- Variant files:
+  - `configs/scenarios/r_strategies/r79_recovery_loops_low.yml`
+  - `configs/scenarios/r_strategies/r79_recovery_loops_medium.yml`
+  - `configs/scenarios/r_strategies/r79_recovery_loops_high.yml`
+- Why this grouped block exists: provide one comparable recovery-loop ladder from incremental to ambitious circular recovery performance.
+- What this grouped block does: strengthens collection, sorting, recycling, routing, and manufacturing scrap-loop closure at three intensity levels.
+- Blocks used across all three variants: `sd_parameters`, `mfa_parameters`, `strategy`.
+- Time structure across all three variants: exogenous ramps from `r79_profiles.csv`.
+- Scope structure across all three variants: global pathway (no `dimension_overrides`).
+- Runtime execution notes:
+  - Execution path is the same across low/medium/high; only ramp amplitudes differ.
+  - This ladder is suitable for clean low-noise global pathway comparisons.
+- Intensity interpretation:
+  - `low`: incremental loop strengthening.
+  - `medium`: stronger circular-loop uplift than low.
+  - `high`: strongest collection/sorting/recycling and near-closed new-scrap loop settings in the R79 track.
+- What to verify in outputs:
+  - monotonic improvements in circular-flow metrics from low to high.
+  - stronger circular supply contribution and lower stress pressure at higher intensity.
+
+#### `r_portfolio_combined`
+
+- Variant file: `configs/scenarios/r_strategies/r_portfolio_combined.yml`
+- Why it exists: combine R02 + R36 + R79 logic into one integrated pathway.
+- What it does: blends demand efficiency, lifetime/reman, and recovery-loop controls with transition policy and SD tuning.
+- Blocks used: `sd_parameters`, `mfa_parameters`, `strategy`, `transition_policy`, `demand_transformation`.
+- Time structure: profile-driven ramps (`r_portfolio_profiles.csv`) with transition-policy gating and mid-horizon pressure features.
+- Scope structure: global integrated pathway (no explicit local overrides).
+- Runtime execution notes: this is the most comprehensive non-shock pathway variant in the repository.
+- What to verify in outputs:
+  - joint movement across service, circular supply, and bottleneck indicators.
+  - balanced improvement pattern rather than single-channel improvement.
+
+## 5) Practical execution examples
+
+The examples below use current run overlays and current variant IDs.
+
+### 5.1 Acute demand shock (`demand_surge`)
 
 ```bash
 PYTHONPATH=src python scripts/run_one.py \
   --config configs/runs/mvp.yml \
-  --variant <your_variant> \
+  --variant demand_surge \
   --phase reporting \
   --save-csv
 ```
 
-Minimum checks:
+What is active:
 
-1. `coupling_converged == True` by slice.
-2. Key mechanism indicators move in expected direction.
-3. No obvious mass-balance or routing anomalies.
+- Block focus: `shocks` + region `dimension_overrides`.
+- No policy or demand-transformation block changes.
 
-### 8) Baseline comparison
+How overrides resolve:
 
-1. Compare against `baseline` for changed indicators only.
-2. Confirm effect is concentrated in intended slices.
-3. Document any spillovers explicitly.
+1. Global `demand_surge` shock is set.
+2. Region-specific overrides replace multiplier by region.
+3. Reporting clamp ensures reporting-phase activation behavior.
 
-### 9) Regression and catalog updates
+What to check:
 
-1. Update scaffold tests if a new scenario file is added.
-2. Update scenario docs for intent and channels.
-3. Add changelog entry when scenario meaning or defaults change.
+- `indicators/timeseries.csv`: `Service_demand`, `Service_level`, `SD_bottleneck_pressure` by region.
+- `summary.csv`: convergence flags and final stress metrics.
 
-## `sd_parameters` temporal formats
+### 5.2 Layered multi-channel stress (`combined_shocks`)
 
-`sd_parameters` and `sd_heterogeneity[*].sd_parameters` support three value forms:
+```bash
+PYTHONPATH=src python scripts/run_one.py \
+  --config configs/runs/mvp.yml \
+  --variant combined_shocks \
+  --phase reporting \
+  --save-csv
+```
 
-| Form | Example | Behavior |
-|---|---|---|
-| Scalar | `capacity_expansion_gain: 0.26` | Constant over all modeled years. |
-| Year-gated | `capacity_expansion_gain: {start_year: 2025, value: 0.34}` | Uses baseline before `start_year`, then `value` from `start_year` onward. Optional `before` can be provided explicitly. |
-| Full timeseries | `coupling_signal_smoothing: [0.50, 0.52, 0.55, ...]` | Applied year-by-year; length must equal modeled year count. |
+What is active:
 
-Rules and precedence:
+- Global demand shock.
+- Local nickel-EU27 and zinc-China shock bundles.
 
-- Resolution order is `run sd_parameters` -> matching `sd_heterogeneity` rules (in order) -> variant `sd_parameters` -> matching `dimension_overrides[*].sd_parameters` (in order).
-- Missing `before` in year-gated values is auto-injected from the active baseline where available.
-- Numeric bounds are validated for scalar, year-gated, and full-timeseries values.
-- Pair constraints are validated elementwise (`collection_multiplier_min <= collection_multiplier_max`, `capacity_envelope_min <= capacity_envelope_max`).
-- Historic-phase SD gates (`start_year < report_start_year`) emit warnings in the current release; enforcement is planned for a later release.
-- Legacy SD aliases are no longer accepted (`base_price`, `scarcity_sensitivity`, `price_elasticity`, `service_stress_gain`, `circular_supply_stress_gain`, `scarcity_smooth`).
-- Legacy strategy collection controls are no longer accepted; use `sd_parameters.collection_multiplier_{min,max,lag_years}` only.
+How overrides resolve:
 
-For interpretation and modeling of the endogenous loop:
+1. Global shock applies everywhere.
+2. Local override bundles apply only to matching slices.
+3. Overlap is resolved by listed order.
 
-- See `docs/model/SD_CAPACITY_SCARCITY_PRICE_LOOP.md`.
+What to check:
 
-`dimension_overrides` entries support:
+- targeted slices should show stronger `Unmet_service` and circular-stress effects than untargeted slices.
 
-- `materials`: list filter (optional, defaults to all materials)
-- `regions`: list filter (optional, defaults to all regions)
-- override blocks (`sd_parameters`, `mfa_parameters`, `strategy`, `shocks`)
+### 5.3 Crisis-to-recovery (`import_squeeze_circular_ramp`)
 
-Multiple matching `dimension_overrides` are applied in order.
+```bash
+PYTHONPATH=src python scripts/run_one.py \
+  --config configs/runs/mvp.yml \
+  --variant import_squeeze_circular_ramp \
+  --phase reporting \
+  --save-csv
+```
 
-## Useful strategy controls
+What is active:
 
-- `refinery_stockpile_release_rate` (0..1): yearly share of refinery stockpile inventory allowed to re-enter demand fulfillment.
-- `new_scrap_to_secondary_share` (0..1): share of fabrication losses routed to the secondary loop (remainder goes to residue/environment boundary).
-- SD collection controls (set in `sd_parameters`):
-  - `collection_multiplier_min` / `collection_multiplier_max`: lower/upper bounds for collection-rate shock multiplier.
-  - `collection_multiplier_lag_years` (>=0): first-order lag (in years) applied to collection-rate shock multiplier.
-  - `collection_price_response_gain` (>=0): SD price-response gain for collection multiplier.
-- Strategic reserve controls:
-  - `strategic_reserve_enabled` (bool, default `false`)
-  - `strategic_reserve_target_coverage_years`
-  - `strategic_reserve_fill_gain`, `strategic_reserve_release_gain`
-  - `strategic_reserve_max_fill_rate`, `strategic_reserve_max_release_rate`
-  - `strategic_reserve_fill_price_threshold`, `strategic_reserve_release_price_threshold`
-  - `strategic_reserve_fill_service_threshold`, `strategic_reserve_release_service_threshold`
+- `sd_parameters`, `transition_policy`, `demand_transformation`, `shocks`, and local overrides.
 
-Collection-rate shock implementation is SD-native:
-- coupling maps `shocks.collection_rate` into SD shock constants (`collection_shock_start`, `collection_shock_duration`, `collection_shock_multiplier`)
-- SD computes the multiplier target as price-pressure response times the shock multiplier
-- SD applies bounds and first-order lag (`collection_multiplier_min/max/lag_years`) from `sd_parameters`
-- effective dMFA collection rate is `clip(base_collection_rate * SD_collection_multiplier, 0, 1)`
+How overrides resolve:
 
-## Supported scenario shock channels
+1. Global stress + policy/efficiency response blocks are resolved.
+2. Local EU27 nickel and RoW overrides are applied.
+3. Ramps are expanded from CSV and then reporting-gated as needed.
+
+What to check:
+
+- early-window stress increase then late-window recovery in service and bottleneck indicators.
+
+### 5.4 Strategic reserve dynamics (`strategic_reserve_build_release`)
+
+```bash
+PYTHONPATH=src python scripts/run_one.py \
+  --config configs/runs/mvp.yml \
+  --variant strategic_reserve_build_release \
+  --phase reporting \
+  --save-csv
+```
+
+What is active:
+
+- reserve controls in `strategy`, strategic smoothing in `sd_parameters`, crisis and intent shocks.
+
+How overrides resolve:
+
+1. Reserve policy parameters activate via gated strategy values.
+2. Strategic intent shocks shape fill/release behavior.
+3. Local damping/priority overrides modify region/material behavior.
+
+What to check:
+
+- reserve stock and coverage indicators show build then release pattern.
+
+### 5.5 Demand-structure transformation (`demand_transformation_shift`)
+
+```bash
+PYTHONPATH=src python scripts/run_one.py \
+  --config configs/runs/mvp.yml \
+  --variant demand_transformation_shift \
+  --phase reporting \
+  --save-csv
+```
+
+What is active:
+
+- demand transformation gates and regional demand-transformation overrides.
+
+How overrides resolve:
+
+1. Demand transformation is enabled and applied per slice.
+2. Regional overrides adjust activity/intensity/efficiency terms.
+3. Supporting demand shock runs in the configured window.
+
+What to check:
+
+- compare service indicators and demand-related stress trajectory to baseline.
+
+### 5.6 Integrated pathway (`r_portfolio_combined`)
+
+```bash
+PYTHONPATH=src python scripts/run_one.py \
+  --config configs/runs/r-strategies.yml \
+  --variant r_portfolio_combined \
+  --phase reporting \
+  --save-csv
+```
+
+What is active:
+
+- combined SD + MFA + strategy + transition policy + demand transformation blocks.
+- scenario profiles are enabled in this run overlay.
+
+How overrides resolve:
+
+1. Base variant values are loaded.
+2. Profile payload overlays variant values for matching keys.
+3. Resolved values are merged into run baseline by block.
+
+What to check:
+
+- balanced co-improvement across service, circularity, and bottleneck signals.
+
+## Scenario authoring checklist
+
+This section is intentionally concise and acts as a compatibility anchor and practical quick list.
+
+1. Define one mechanism hypothesis first, then add complexity.
+2. Keep `description` and `implementation` explicit and testable.
+3. Use global blocks for broad behavior; use `dimension_overrides` only for true slice heterogeneity.
+4. Keep override order intentional when multiple items can match the same slice.
+5. Prefer reporting-window activation unless historical divergence is explicitly intended.
+6. Use `exogenous_ramp` for structural pathways and `shocks` for discrete events.
+7. Run baseline and scenario with the same run config before comparing outcomes.
+8. Validate convergence and mechanism movement before expanding scope.
+9. Keep schema/contract details in `docs/workflows/CONFIGS.md`.
+
+## 7) Troubleshooting and quick validation
+
+### 7.1 Quick checks for scenario catalog and links
+
+```bash
+rg -n "^## Scenario authoring checklist" docs/workflows/SCENARIOS.md
+rg -n "configs/scenarios/.+\.yml" docs/workflows/SCENARIOS.md
+rg -n "SCENARIOS\.md#scenario-authoring-checklist" README.md docs
+```
+
+### 7.2 Quick checks for variant coverage
+
+```bash
+python - <<'PY'
+import glob, yaml
+files=sorted(glob.glob('configs/scenarios/**/*.yml', recursive=True))
+print('scenario files:', len(files))
+print('variant names:')
+for f in files:
+    d=yaml.safe_load(open(f))
+    print('-', d.get('name'))
+PY
+```
+
+### 7.3 Runtime validation commands
+
+Single variant run:
+
+```bash
+PYTHONPATH=src python scripts/run_one.py --config configs/runs/mvp.yml --variant demand_surge --phase reporting --save-csv
+```
+
+Pre-report drift warning check:
+
+```bash
+PYTHONPATH=src python scripts/validation/check_reporting_preperiod_drift.py --config configs/runs/mvp.yml
+```
+
+### 7.4 Typical interpretation issues
+
+1. If a change appears before `report_start_year`, confirm whether explicit `before` values were set in year-gated/ramp forms.
+2. If local overrides seem ignored, verify `materials`/`regions` filters match canonical IDs exactly.
+3. If profile ramps appear to override YAML values, confirm `scenario_profiles.enabled` and matching profile rows for the active variant.
+4. If OD trade effects look inconsistent across iterations, inspect both coupling convergence outputs and OD outer-loop diagnostics.
+
+## 8) Supported scenario shock channels in current packs
+
+Current scenario files actively use the following shock channels:
 
 - `demand_surge`
 - `recycling_disruption`
 - `primary_refined_output`
 - `trade_refined_import_need_multiplier`
-- `trade_concentrate_import_need_multiplier`
-- `trade_scrap_import_need_multiplier`
-- `trade_export_capacity_multiplier`
-- `extraction_yield`
-- `beneficiation_yield`
-- `refining_yield`
-- `sorting_yield`
 - `collection_rate`
 - `recycling_rate`
 - `remanufacturing_rate`
-- `disposal_rate`
 - `strategic_fill_intent`
 - `strategic_release_intent`
 
-For routing-rate shocks (`recycling_rate`, `remanufacturing_rate`, `disposal_rate`), runtime renormalizes each year so:
+Additional channels remain available by contract in run config defaults; see `docs/workflows/CONFIGS.md` for complete interface details.
 
-`recycling_rate + remanufacturing_rate + disposal_rate = 1`
+## 9) Related sections
 
-Remanufacturing routing is additionally constrained by end-use eligibility from
-`data/exogenous/remanufacturing_end_use_eligibility.csv` at high-level end-use resolution.
-
-## Current baseline scenario set (`configs/runs/mvp.yml`)
-
-- `baseline`
-  - No scenario-specific overrides.
-- `demand_surge`
-  - Global demand shock with regional severity modulation.
-  - Harmonized acute window: 2025-2039.
-- `recycling_disruption`
-  - Global recycling disruption with explicit regional overrides for `EU27`, `China`, and `RoW`.
-  - Harmonized acute window: 2025-2039.
-- `combined_shocks`
-  - Global demand surge plus targeted material-region supply/circularity stresses.
-  - Harmonized acute window: 2025-2039.
-- `circularity_push`
-  - Profile-driven circularity ramps with global uplift and additional `nickel`/`EU27` targeted routing reinforcement.
-- `capacity_crunch_recovery`
-  - Explicit crunch-recovery stress test targeting the endogenous capacity-envelope, bottleneck-pressure, and scarcity/price response loop.
-- `transition_policy_acceleration`
-  - Activates policy-adoption/compliance delay dynamics to strengthen collection/recycling/capacity response while reducing bottleneck amplification.
-- `demand_transformation_shift`
-  - Activates demand transformation via optional service-activity and material-intensity drivers plus efficiency/rebound controls.
-- `import_squeeze_circular_ramp`
-  - External primary availability squeeze followed by delayed transition-policy and demand-transformation ramp to test resilience recovery.
-
-## Additional stress scenarios (in `configs/scenarios/mvp/*.yml`)
-
-- `strategic_reserve_build_release`
-  - Enables strategic reserve policy.
-  - Uses a pre-crisis accumulation window and later crisis drawdown via demand and strategic-intent shocks.
-
-## R-strategies pack (`configs/runs/r-strategies.yml`)
-
-This pack is dMFA-first and maps scenarios to grouped R-strategies levers.
-It uses a 3-level ladder per group plus one cross-group portfolio scenario.
-Runtime CSV profile overlay is enabled in `configs/runs/r-strategies.yml`.
-
-- Pack-level baseline adjustment:
-  - `strategy.new_scrap_to_secondary_share: 0.85`
-  - Rationale: creates explicit headroom for R7-R9 manufacturing-scrap loop closure scenarios.
-
-### R0/R2: Demand + material efficiency
-- `r02_demand_efficiency_low`
-- `r02_demand_efficiency_medium`
-- `r02_demand_efficiency_high`
-- Main channels:
-  - `demand_transformation` (`service_activity_multiplier`, `material_intensity_multiplier`, `efficiency_improvement`, `rebound_effect`)
-  - higher `mfa_parameters.fabrication_yield`
-
-### R3/R6: Lifetime extension + remanufacturing loops
-- `r36_lifetime_reman_low`
-- `r36_lifetime_reman_medium`
-- `r36_lifetime_reman_high`
-- Main channels:
-  - `strategy.lifetime_multiplier`
-  - routing mix (`recycling_rate`, `remanufacturing_rate`, `disposal_rate`) with normalized sums
-  - `strategy.reman_yield`
-
-### R7-R9: Collection/sorting/recycling + new scrap loop closure
-- `r79_recovery_loops_low`
-- `r79_recovery_loops_medium`
-- `r79_recovery_loops_high`
-- Main channels:
-  - `mfa_parameters.collection_rate`
-  - `mfa_parameters.sorting_yield`
-  - `strategy.recycling_yield`
-  - routing mix (`recycling_rate`, `remanufacturing_rate`, `disposal_rate`)
-  - `strategy.new_scrap_to_secondary_share`
-
-### Cross-group portfolio
-- `r_portfolio_combined`
-  - blends medium-to-high ambition settings across R0/R2, R3/R6, and R7-R9.
-
-All R-strategies scenarios use a hybrid regional template with explicit `dimension_overrides` for:
-- `EU27` (ambition-up),
-- `China` (reference/moderate),
-- `RoW` (more conservative transition).
-
-## Reporting profile workflow
-
-CSV profiles are used as exogenous ramp sources and can be consumed in two ways:
-
-1. Key-level `exogenous_ramp` references in scenario YAML (preferred for MVP).
-2. Run-level runtime auto-activation via `scenario_profiles` (used in `r-strategies`).
-
-Authoring inputs:
-
-- `data/ramp_profiles/mvp/`
-- `data/ramp_profiles/r_strategies/`
-- template: `data/ramp_profiles/templates/reporting_timeseries_profile_template.csv`
-
-Manual expansion utility (for review/debug):
-
-```bash
-PYTHONPATH=src python scripts/scenarios/build_reporting_timeseries_profiles.py \
-  --config configs/runs/mvp.yml \
-  --profile data/ramp_profiles/mvp/import_squeeze_circular_ramp.csv
-```
-
-Generated payloads are written under:
-- `outputs/analysis/scenario_profile_expansions/latest/`
-
-Current usage policy:
-
-- `configs/runs/mvp.yml`: run-level `scenario_profiles` overlay is deprecated/not used; MVP ramps should be declared per key using `exogenous_ramp`.
-- `configs/runs/r-strategies.yml`: runtime `scenario_profiles` auto-activation remains enabled for `data/ramp_profiles/r_strategies/*.csv`.
-
-Canonical path policy:
-
-- Active scenario authoring should use `data/ramp_profiles/**`.
-- `data/scenario_profiles/**` references are backward-compatible only for one release cycle via runtime path fallback.
-
-## Ramp mechanisms and activation
-
-There are two distinct ways ramps can appear in scenarios.
-
-### Why both exist
-
-Both are intentionally kept because they serve different purposes:
-
-1. Endogenous ramps are mechanism-first:
-   - used when timing should emerge from model feedbacks, delays, and saturation behavior.
-   - best for policy/adoption interpretation and interaction realism.
-2. Exogenous ramps are assumption-first:
-   - used when a scenario requires an explicit prescribed trajectory from outside the model.
-   - best for reproducibility, transparent scenario governance, and deterministic comparisons.
-3. Practical workflow split in this repo:
-   - use endogenous ramps for transition/policy behavior channels.
-   - use exogenous profile ramps for scenario-scripted temporal paths (especially in `r-strategies`).
-   - keep acute disruption pulses as exogenous shocks when abrupt events are the intended narrative.
-
-Allowed discrete steps vs must-ramp controls:
-
-- Keep discrete: acute crisis pulses in `shocks` (for example embargo/disruption windows).
-- Ramp instead of step: long-duration structural changes in collection, routing, yields, and loop-closure controls.
-
-### Interpreting ratio jumps (`EoL_RR`, `RIR`)
-
-- Ratio indicators can move sharply even when individual controls are smooth if numerator and denominator channels are both rerouted.
-- Diagnose jumps by checking the paired flow components first (`EoL_generated`, `EoL_recycled`, `Secondary_supply`, `Primary_supply`), then control ramps.
-- When discontinuities appear around policy start years, inspect whether any structural key still uses a year-gated step instead of a ramp.
-
-### 1) Endogenous transition-policy ramp (runtime, no CSV required)
-
-This ramp is activated when a scenario sets:
-- `transition_policy.enabled: true`
-
-Shape controls are:
-- `transition_policy.start_year`
-- `transition_policy.compliance_delay_years`
-- `transition_policy.adoption_lag_years`
-- `transition_policy.adoption_target`
-
-At runtime, this creates a smooth adoption trajectory that then modulates selected
-MFA/SD/strategy channels (for example collection uplift, recycling-yield uplift,
-capacity-expansion gain uplift, and bottleneck relief).
-
-### 2) Exogenous profile ramp (CSV-driven)
-
-Preferred declaration surface (scenario YAML, per-key):
-
-```yaml
-mfa_parameters:
-  collection_rate:
-    exogenous_ramp: data/ramp_profiles/mvp/circularity_push.csv
-```
-
-Resolution behavior:
-
-1. Runtime reads the referenced CSV and selects rows by `(variant, block, key)`.
-2. Scope precedence is:
-   - exact `material+region`
-   - `material` only
-   - `region` only
-   - global (blank material/region)
-3. Selected anchors are converted to temporal ramp points and then pass normal reporting-phase clipping/baseline rules.
-
-Run-level auto overlay via `scenario_profiles` is still supported for packs that opt into it (currently `r-strategies`).
-
-### Why some scenarios are defined directly in `.yml`
-
-Scenarios such as `import_squeeze_circular_ramp` are authored directly in scenario
-YAML because they combine multiple channels in one variant:
-- shocks
-- `transition_policy`
-- `demand_transformation`
-- SD/MFA/strategy overrides
-- dimension overrides
-
-The profile CSV for that scenario is optional and mainly used when you want explicit
-piecewise time paths for selected parameters beyond simple year-gates.
-
-## Comparison workflow
-
-After running scenario variants, build a standardized comparison package from the latest run of each variant:
-
-```bash
-python scripts/analysis/compare_scenarios.py --config <config.yml>
-python scripts/analysis/plot_scenario_subset_panels.py --config <config.yml>
-```
-
-Outputs are run-scoped (within a single run config) and written by default to
-`outputs/analysis/scenario_comparison/<run_config_stem>/latest/`:
-- `summary_comparison.csv`
-- `delta_vs_baseline.csv`
-- `scenario_kpis.csv`
-- `plots/subset_panels/*.png` (line-chart grids: rows=indicators, cols=regions, scenario lines)
-- `plots/subset_panels/*__matrix_raw.csv` (raw subset matrices by indicator x region-variant)
-- `plots/subset_panels/*__matrix_normalized.csv` (row-normalized subset matrices)
-- `plots/indicator_panels/<subset>/*.png` (one indicator per panel, material + regional detail)
-- `plots/subset_panel_coverage.csv`
-- `plots/indicator_panel_coverage.csv`
-
-By default, if a `latest/` package already exists, it is archived before rewriting:
-- comparison package archive path: `outputs/analysis/scenario_comparison/<run_config_stem>/archives/<timestamp>/`
-- plot package archive path: `outputs/analysis/scenario_comparison/<run_config_stem>/latest/archives/<timestamp>/`
-
-Disable this behavior with `--no-archive-existing` in either script.
-
-Optional end-use detail can be added from a precomputed file (no model run required):
-
-```bash
-python scripts/analysis/plot_scenario_subset_panels.py --config <config.yml> \
-  --end-use-source outputs/analysis/stock_in_use_by_end_use_region_scenarios/<timestamp>/stock_in_use_by_end_use_region_scenario.csv
-```
-
-## Minimum scenario acceptance checks
-
-1. `summary.csv` reports `coupling_converged == True` for all slices.
-2. Direction of change matches scenario intent in at least primary target slices.
-3. No structural anomalies in diagnostics (`Mass_balance_residual_max_abs`, routing consistency).
+- [CONFIGS.md §5-7](./CONFIGS.md#5-variant-interface-contract-configsscenariosyml) for schema and precedence details referenced by this execution guide.
+- [ARCHITECTURE.md §7](../model/ARCHITECTURE.md#7-coupling-logic-inner-outer-loops) for where scenario overrides act in coupling runtime.
+- [INDICATORS.md §5](../model/INDICATORS.md#5-coupling-diagnostics-interpretation-dedicated-section) for post-run iteration diagnostics interpretation.

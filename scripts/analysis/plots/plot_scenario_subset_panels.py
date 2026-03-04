@@ -8,6 +8,7 @@ Outputs:
 """
 
 from __future__ import annotations
+# ruff: noqa: E402
 
 import argparse
 from datetime import datetime

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Backward-compatible SD builder surface.
 
 This module is retained as a compatibility shim while implementation logic is
@@ -10,6 +8,8 @@ split across dedicated modules:
 - `crm_model.sd.shocks`
 - `crm_model.sd.scenario`
 """
+
+from __future__ import annotations
 
 from .bptk_model import DemandModel, SDTimeseries
 from .levers import apply_sd_lever_overrides

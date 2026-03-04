@@ -16,19 +16,14 @@ from flodym import (
 )
 
 from .dimensions import _subset_dims
-from .parameters import _as_timeseries, _resolve_routing_rates
+from .parameters import _as_timeseries, _gate_with_before, _resolve_routing_rates
 from .system import MFATimeseries, SimpleMetalCycleWithReman
 
 
 def _strategy_override_with_before(strategy: Dict[str, Any], key: str, baseline: Any) -> Any:
     if key not in strategy:
         return baseline
-    value = strategy.get(key)
-    if isinstance(value, dict) and "start_year" in value and "value" in value and "before" not in value:
-        out = dict(value)
-        out["before"] = baseline
-        return out
-    return value
+    return _gate_with_before(strategy.get(key), baseline)
 
 
 def _resolve_stockpile_release_rate(

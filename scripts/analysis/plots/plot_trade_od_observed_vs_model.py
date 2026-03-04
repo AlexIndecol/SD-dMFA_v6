@@ -2,6 +2,7 @@
 """Compare observed OD trade flows against pre/post calibration model allocations."""
 
 from __future__ import annotations
+# ruff: noqa: E402
 
 import argparse
 import os
@@ -257,12 +258,9 @@ def main() -> int:
         materials=materials,
         regions=regions,
         commodities=commodities,
-        observed_flows=observed,
         weights=weights,
         constraints=constraints,
         sd_capacity_envelope_by_material_region=cap_lookup,
-        historical_window_start_year=int(cfg.trade_od.historical_window_start_year),
-        historical_window_end_year=int(cfg.trade_od.historical_window_end_year),
         capacity_cap_hybrid_mode=str(cfg.trade_od.capacity_cap_hybrid_mode),
         capacity_cap_sd_multiplier=float(pre_sd_mult),
         coupling_relax_lambda_0_1=float(pre_lambda),
@@ -273,12 +271,9 @@ def main() -> int:
         materials=materials,
         regions=regions,
         commodities=commodities,
-        observed_flows=observed,
         weights=weights,
         constraints=constraints,
         sd_capacity_envelope_by_material_region=cap_lookup,
-        historical_window_start_year=int(cfg.trade_od.historical_window_start_year),
-        historical_window_end_year=int(cfg.trade_od.historical_window_end_year),
         capacity_cap_hybrid_mode=str(cfg.trade_od.capacity_cap_hybrid_mode),
         capacity_cap_sd_multiplier=float(post_sd_mult),
         coupling_relax_lambda_0_1=float(post_lambda),

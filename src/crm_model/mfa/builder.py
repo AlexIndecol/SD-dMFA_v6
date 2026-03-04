@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Backward-compatible MFA builder surface.
 
 This module is retained as a compatibility shim while implementation logic is
@@ -9,6 +7,8 @@ split across dedicated modules:
 - `crm_model.mfa.system`
 - `crm_model.mfa.run_mfa`
 """
+
+from __future__ import annotations
 
 from .dimensions import _subset_dims
 from .parameters import _as_timeseries, _resolve_routing_rates

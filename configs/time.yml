@@ -1,20 +1,16 @@
-# Interface Contract: Time Dimension and Windows
-#
-# Section 1) Scope
-# - Defines modeled horizon and calibration/reporting split years.
-#
-# Section 2) Required keys
-# - dimension: {name, symbol}
-# - start_year, calibration_end_year, report_start_year, end_year
-#
-# Section 3) Ordering constraint
-# - start_year <= calibration_end_year < report_start_year <= end_year
-#
+# Modeled time axis used by SD, dMFA, and all exogenous series.
 dimension:
   name: time
   symbol: t
 
+# Full modeled horizon.
 start_year: 1870
+# Last year included in calibration-focused evaluation windows.
 calibration_end_year: 2019
+# First year of reporting-policy behavior and scenario activation.
 report_start_year: 2020
+# Final year kept in simulation outputs.
 end_year: 2100
+
+# Ordering rule to keep valid windows:
+# start_year <= calibration_end_year < report_start_year <= end_year

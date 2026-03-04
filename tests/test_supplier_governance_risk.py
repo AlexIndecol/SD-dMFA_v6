@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
-
 from crm_model.data.io import load_supplier_governance_risk
 
 
@@ -24,4 +22,3 @@ def test_supplier_governance_risk_dataset_contract():
     assert int(counts["EU27"]) == 231
     assert int(counts["China"]) == 231
     assert int(counts["RoW"]) == 231
-

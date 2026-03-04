@@ -1,8 +1,9 @@
-# Interface Template Reference:
-# - configs/templates/run_core_interface.yml
-
+# Canonical shared run profile.
+# Keep defaults here broad and reusable; scenario-specific behavior should stay in scenario files.
 name: "Tin–Zinc–Nickel | EU27–China–RoW | Coupled SD–dMFA (core)"
 
+# Includes are merged into this run profile.
+# Paths are relative to this file.
 includes:
   time: ../time.yml
   regions: ../regions.yml
@@ -16,20 +17,18 @@ includes:
   indicators: ../indicators.yml
   variables: ../../registry/variable_registry.yml
 
-# SD parameter interface contract (applies to sd_parameters and sd_heterogeneity.sd_parameters):
-# 1) scalar
-#    capacity_expansion_gain: 0.26
-# 2) year-gated override
-#    capacity_expansion_gain:
-#      start_year: 2025
-#      value: 0.34
-#      before: 0.26   # optional; injected from baseline when omitted
-# 3) full timeseries (length must match modeled years)
-#    coupling_signal_smoothing: [0.50, 0.50, 0.52, 0.55]
+# Temporal values can be:
+# - scalar: capacity_expansion_gain: 0.26
+# - year-gated: {start_year: 2025, value: 0.34, before: 0.26}
+# - full timeseries: [0.50, 0.50, 0.52, 0.55]
 sd_parameters:
+  # Price loop:
+  # scarcity_multiplier -> price_ratio -> demand response and collection response.
   price_base: 1.0
   price_scarcity_sensitivity: 0.55
   demand_price_elasticity: 0.1
+  # Coupling stress multiplier:
+  # 1 + gain_service * service_stress + gain_circular * circular_stress
   coupling_service_stress_gain: 3.5
   coupling_circular_supply_stress_gain: 0.8
   coupling_signal_smoothing: 0.5
@@ -50,6 +49,8 @@ sd_parameters:
   bottleneck_scarcity_gain: 0.15
   bottleneck_collection_sensitivity: 0.08
 
+# Ordered override rules by material/region.
+# Matching rules are applied in list order before variant-level overrides.
 sd_heterogeneity:
   - name: region_eu27
     regions: [EU27]
@@ -71,6 +72,7 @@ sd_heterogeneity:
     sd_parameters:
       coupling_service_stress_gain: 4.5
 
+# Baseline dMFA controls used unless scenario overrides apply.
 mfa_parameters:
   fabrication_yield: 0.9516291043157408
   collection_rate: 0.598632813775853
@@ -78,6 +80,7 @@ mfa_parameters:
   reman_yield: 0.7168092328464711
   mass_balance_tolerance: 1.0e-8
 
+# Strategy controls for routing, stock release, and reserve policy.
 strategy:
   reman_yield: 0.6881412051746674
   lifetime_multiplier: 1.319713009082212
@@ -94,17 +97,7 @@ strategy:
   strategic_reserve_fill_service_threshold: 0.05
   strategic_reserve_release_service_threshold: 0.15
 
-# Transition-policy loop contract:
-# - enabled: activate adoption/compliance dynamic.
-# - start_year: first year policy can activate (compliance delay is additive).
-# - adoption_target: long-run adoption share in [0,1].
-# - adoption_lag_years: adjustment time constant for adoption stock.
-# - compliance_delay_years: initial delay before adoption starts moving.
-# - demand_intensity_reduction_max: max additional demand-intensity reduction from full adoption.
-# - collection_uplift_max: max multiplicative uplift applied to baseline collection_rate.
-# - recycling_yield_uplift_max: max multiplicative uplift applied to recycling_yield.
-# - capacity_expansion_gain_uplift: max multiplicative uplift applied to capacity_expansion_gain.
-# - bottleneck_relief_max: max proportional relief applied to bottleneck gain channels.
+# Transition policy controls adoption-driven uplifts and relief.
 transition_policy:
   enabled: false
   start_year: 2025
@@ -117,15 +110,7 @@ transition_policy:
   capacity_expansion_gain_uplift: 0.0
   bottleneck_relief_max: 0.0
 
-# Demand-transformation loop contract:
-# - enabled: activate decomposition on top of final_demand.
-# - service_activity_source/material_intensity_source: variable-registry ids for optional drivers.
-# - *_multiplier: scalar/year-gated/timeseries multipliers for each driver.
-# - efficiency_improvement: additional demand reduction fraction in [0,1).
-# - rebound_effect: rebound share in [0,1] that offsets efficiency reduction.
-# - transition_adoption_weight: coupling weight from transition-policy adoption stock in [0,1].
-# - min_demand_multiplier/max_demand_multiplier: clamp bounds for total transformed multiplier.
-# - normalize_exogenous: if true, exogenous driver series are normalized to first modeled year.
+# Demand transformation decomposes demand into service activity and material intensity.
 demand_transformation:
   enabled: false
   service_activity_source: service_activity
@@ -139,12 +124,7 @@ demand_transformation:
   max_demand_multiplier: 2.5
   normalize_exogenous: true
 
-# Scenario-profile activation contract:
-# - enabled: turn CSV profile loading on/off at runtime.
-# - csv_globs: one or more glob patterns for profile CSV files.
-# - interpolation: currently supports linear interpolation between provided year points.
-# - apply_precedence: must be profile_overrides_variant (profile payload overrides variant YAML).
-# - emit_resolved_payload: write resolved profile overlay payload into run artifacts.
+# Scenario profile CSVs can overlay variant values at runtime when enabled.
 scenario_profiles:
   enabled: false
   csv_globs: []
@@ -152,6 +132,8 @@ scenario_profiles:
   apply_precedence: profile_overrides_variant
   emit_resolved_payload: true
 
+# Shock dictionary defines channels available to scenario variants.
+# `null` means no active event in the baseline.
 shocks:
   demand_surge: null
   recycling_disruption: null
@@ -173,6 +155,7 @@ shocks:
 
 variants:
   baseline:
+    # Baseline is intentionally thin and inherits all defaults above.
     description: Reference pathway with exogenous demand, primary refined output anchor, endogenous trade channels, and routing rates as provided in input datasets.
     implementation:
       - No additional variant-level overrides.

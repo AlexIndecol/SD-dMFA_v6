@@ -2,6 +2,13 @@
 
 This file captures high-value calibration clarifications for this repository.
 
+## Document position
+
+- You are here: Tier 2 canonical calibration workflow reference.
+- Canonical scope: calibration objective semantics, tuning workflow, promotion policy, and OD calibration staging.
+- Out of scope: full scenario-catalog rationale and full indicator card definitions.
+- Related docs: [CONFIGS.md](./CONFIGS.md), [SCENARIOS.md](./SCENARIOS.md), [ARCHITECTURE.md](../model/ARCHITECTURE.md), [INDICATORS.md](../model/INDICATORS.md), [MODEL_GOVERNANCE.md](../governance/MODEL_GOVERNANCE.md)
+
 ## 1) What the calibration objective is actually fitting
 
 - The calibration objective is based on **observed stock-in-use fit** (train/validation windows from `configs/calibration.yml`).
@@ -193,7 +200,7 @@ Guardrails:
 2. Keep SD gates in reporting phase unless historical reconstruction is explicitly intended.
 3. Require convergence and baseline-drift checks after any SD-parameter updates.
 
-## 12) Incremental OD-trade calibration (endogenous trade vs exogenous OD data)
+## 12) OD-trade calibration (endogenous trade vs exogenous OD data)
 
 When `trade_od.enabled=true`, calibrate trade-layer controls in a second stage after baseline stock calibration.
 This is a calibration/backtesting workflow against observed OD matrices, not a runtime input dependency.
@@ -241,3 +248,9 @@ Current calibrated knobs:
 
 1. `trade_od.coupling_relax_lambda_0_1`
 2. `trade_od.capacity_cap_sd_multiplier`
+
+## 13) Related sections
+
+- [SCENARIOS.md §3](./SCENARIOS.md#3-how-scenario-variants-are-executed-in-runtime) for runtime ordering relevant to calibration checks.
+- [CONFIGS.md §7](./CONFIGS.md#7-precedence-and-merge-semantics) for precedence behavior when applying promoted patches.
+- [RISKS.md](../governance/RISKS.md) for interpretation limits tied to calibration outputs.

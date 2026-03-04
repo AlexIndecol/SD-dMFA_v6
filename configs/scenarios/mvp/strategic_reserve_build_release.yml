@@ -1,182 +1,201 @@
-# Interface Contract: Scenario Variant
-#
-# Section 1) Scope
-# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
-# - Applies to this file only; values are merged onto the active run baseline.
-#
-# Section 2) Required keys
-# - name: unique variant id used by CLI --variant selection.
-# - description: concise plain-language scenario intent.
-# - implementation: list[str] describing how config changes map to model behavior.
-#
-# Section 3) Optional override blocks
-# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
-# - Any omitted block inherits active values from run baseline and prior merge layers.
-#
-# Section 4) dimension_overrides item schema
-# - name?, materials?, regions?, sd_parameters?, mfa_parameters?, strategy?, shocks?.
-# - Filters default to all materials/regions when omitted.
-# - Multiple matching items are applied in file order.
-#
-# Section 5) SD temporal values
-# - Applies to temporal-capable SD keys (for example sd_parameters.* and sd_heterogeneity.sd_parameters.*).
-# - Form A scalar (constant for all modeled years):
-#   key: 0.30
-# - Form B year-gated step (switches at start_year):
-#   key:
-#     start_year: 2025
-#     value: 0.35
-#     before: 0.30   # optional; if omitted, baseline is injected at runtime
-# - Form C full timeseries (explicit per-year values):
-#   key: [0.30, 0.30, 0.31, ...]
-# - Form D exogenous ramp reference (CSV-backed; resolves to temporal points at runtime):
-#   key:
-#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
-#     # optional selectors for explicit routing:
-#     # variant: example_variant
-#     # block: mfa_parameters
-#     # key: collection_rate
-#     # material: nickel
-#     # region: EU27
-# - Full timeseries length must equal modeled year count (time.start_year..time.end_year).
-# - Year-gates before report_start_year are shifted/clipped by reporting-phase enforcement.
-#
+# Scenario config: strategic_reserve_build_release
+# Practical reading order: implementation -> global blocks -> dimension_overrides.
+# Keep overrides minimal and aligned with the mechanism being tested.
 name: strategic_reserve_build_release
+# Short plain-language summary used in reporting and run metadata.
 description: Strategic reserve stress-test with a pre-crisis accumulation phase and
   crisis-driven release phase.
+# Mechanism checklist. These bullets should match the actual overrides below.
 implementation:
 - Enables strategic reserve policy and targets short-run coverage build during low-stress
   years.
 - Applies a later demand surge and intent multipliers to induce reserve drawdown response.
+# SD loop tuning: scarcity-price-demand feedback and capacity/bottleneck behavior.
 sd_parameters:
   coupling_signal_smoothing: 0.48
   coupling_signal_smoothing_strategic:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.45
   strategic_stock_coverage_years: 0.0
+# Strategy levers: routing, reserve policy, stock-release, and lifetime multipliers.
 strategy:
   strategic_reserve_enabled:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: true
   strategic_reserve_target_coverage_years:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.8
   strategic_reserve_fill_gain:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.7
   strategic_reserve_release_gain:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.7
   strategic_reserve_max_fill_rate:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.2
   strategic_reserve_max_release_rate:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.12
   strategic_reserve_fill_price_threshold:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 5.0
   strategic_reserve_release_price_threshold:
+    # Activation year for this temporal override/event.
     start_year: 2040
     before: 5.0
     value: 1.3
   strategic_reserve_fill_service_threshold:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 1.0
   strategic_reserve_release_service_threshold:
+    # Activation year for this temporal override/event.
     start_year: 2040
     before: 1.0
     value: 0.25
   refinery_stockpile_release_rate:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.2
+# Shock events use step parameters: start_year, duration_years, multiplier.
 shocks:
   trade_refined_import_need_multiplier:
+    # Activation year for this temporal override/event.
     start_year: 2025
+    # Event duration in years (inclusive step window).
     duration_years: 15
+    # Multiplies the baseline channel while the event is active.
     multiplier: 1.15
   demand_surge:
+    # Activation year for this temporal override/event.
     start_year: 2040
+    # Event duration in years (inclusive step window).
     duration_years: 20
+    # Multiplies the baseline channel while the event is active.
     multiplier: 1.3
   strategic_fill_intent:
+    # Activation year for this temporal override/event.
     start_year: 2025
+    # Event duration in years (inclusive step window).
     duration_years: 15
+    # Multiplies the baseline channel while the event is active.
     multiplier: 1.1
+# Slice-targeted overrides. Matching items are applied in the listed order.
 dimension_overrides:
+# Override item: define scope first, then local block deltas.
 - name: reserve_damping_non_priority_regions
+  # Region filter for this override item. Omit to match all regions.
   regions:
   - China
   - RoW
   strategy:
     strategic_reserve_target_coverage_years:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.2
     strategic_reserve_fill_gain:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.2
     strategic_reserve_release_gain:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.3
     strategic_reserve_max_fill_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.05
     strategic_reserve_max_release_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.1
+# Override item: define scope first, then local block deltas.
 - name: reserve_damping_eu27_non_nickel
+  # Material filter for this override item. Omit to match all materials.
   materials:
   - tin
   - zinc
+  # Region filter for this override item. Omit to match all regions.
   regions:
   - EU27
   strategy:
     strategic_reserve_target_coverage_years:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.25
     strategic_reserve_fill_gain:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.2
     strategic_reserve_release_gain:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.3
     strategic_reserve_max_fill_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.05
     strategic_reserve_max_release_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.1
+# Override item: define scope first, then local block deltas.
 - name: nickel_eu27_deeper_reserve_buffer
+  # Material filter for this override item. Omit to match all materials.
   materials:
   - nickel
+  # Region filter for this override item. Omit to match all regions.
   regions:
   - EU27
   strategy:
     strategic_reserve_target_coverage_years:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 1.2
     strategic_reserve_fill_gain:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.8
     strategic_reserve_release_gain:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.9
     strategic_reserve_max_fill_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.2
     strategic_reserve_max_release_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
       value: 0.25
   shocks:
     trade_refined_import_need_multiplier:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 1.35
     demand_surge:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 1.0
     strategic_release_intent:
+      # Activation year for this temporal override/event.
       start_year: 2040
+      # Event duration in years (inclusive step window).
       duration_years: 20
+      # Multiplies the baseline channel while the event is active.
       multiplier: 1.25

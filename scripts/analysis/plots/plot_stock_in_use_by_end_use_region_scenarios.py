@@ -24,6 +24,10 @@ from matplotlib.lines import Line2D
 
 from crm_model.common.io import load_run_config, resolve_repo_root_from_config
 from crm_model.common.run_layout import archive_old_timestamped_runs
+from crm_model.cli import (
+    _enforce_reporting_phase_for_variant_slice,
+    _resolve_exogenous_ramps_for_variant_slice,
+)
 from crm_model.coupling.runner import run_loose_coupled
 from crm_model.data import (
     collection_routing_rates_t,
@@ -41,6 +45,7 @@ from crm_model.data import (
 from crm_model.mfa import lifetime_pdf_trea_flodym_adapter
 from crm_model.mfa.run_mfa import run_flodym_mfa
 from crm_model.sd.params import (
+    expand_temporal_value,
     migrate_legacy_strategy_sd_controls,
     normalize_and_validate_sd_parameters,
 )
@@ -93,15 +98,21 @@ def _shock_multiplier_series(
     return mult
 
 
-def _as_timeseries(value: Any, *, years: Sequence[int], name: str, default: float) -> np.ndarray:
-    if value is None:
-        return np.array([float(default)] * len(years), dtype=float)
-    if isinstance(value, (list, tuple, np.ndarray)):
-        arr = np.array(value, dtype=float).reshape(-1)
-        if arr.size != len(years):
-            raise ValueError(f"{name} must have length {len(years)}; got {arr.size}.")
-        return arr
-    return np.array([float(value)] * len(years), dtype=float)
+def _as_timeseries(
+    value: Any,
+    *,
+    years: Sequence[int],
+    name: str,
+    default: float | None,
+    report_start_year: int | None = None,
+) -> np.ndarray:
+    return expand_temporal_value(
+        value,
+        years=years,
+        name=name,
+        default=default,
+        report_start_year=report_start_year,
+    )
 
 
 def _collect_stock_rows(
@@ -123,6 +134,16 @@ def _collect_stock_rows(
     )
     mfa_base = cfg.mfa_parameters
     strategy_base = cfg.strategy.model_dump(exclude_none=True, exclude_unset=True)
+    transition_policy_base = (
+        cfg.transition_policy.model_dump(exclude_none=True, exclude_unset=True)
+        if getattr(cfg, "transition_policy", None) is not None
+        else {}
+    )
+    demand_transformation_base = (
+        cfg.demand_transformation.model_dump(exclude_none=True, exclude_unset=True)
+        if getattr(cfg, "demand_transformation", None) is not None
+        else {}
+    )
     shocks_base = cfg.shocks.model_dump(exclude_none=True, exclude_unset=True)
 
     vars_ = cfg.variables
@@ -154,6 +175,25 @@ def _collect_stock_rows(
                 material=material,
                 region=region,
             )
+            variant_slice = _resolve_exogenous_ramps_for_variant_slice(
+                variant_slice=variant_slice,
+                repo_root=repo_root,
+                variant_name=variant_name,
+                material=material,
+                region=region,
+            )
+            if report_years:
+                variant_slice = _enforce_reporting_phase_for_variant_slice(
+                    variant_slice=variant_slice,
+                    years=years,
+                    report_start_year=cfg.time.report_start_year,
+                    sd_base=sd_base,
+                    mfa_base=mfa_base,
+                    strategy_base=strategy_base,
+                    transition_policy_base=transition_policy_base,
+                    demand_transformation_base=demand_transformation_base,
+                    shocks_base=shocks_base,
+                )
             sd_params = resolve_sd_parameters_for_slice(
                 sd_base=sd_base,
                 sd_heterogeneity=cfg.sd_heterogeneity,
@@ -185,7 +225,13 @@ def _collect_stock_rows(
                 end_uses=dims.end_uses,
             )
 
-            lt_mult = float(strategy.get("lifetime_multiplier", 1.0) or 1.0)
+            lt_mult = _as_timeseries(
+                strategy.get("lifetime_multiplier"),
+                years=years,
+                name="strategy.lifetime_multiplier",
+                default=1.0,
+                report_start_year=cfg.time.report_start_year,
+            )
             lt_pdf = lifetime_pdf_trea_flodym_adapter(
                 lt_df,
                 years=years,
@@ -265,6 +311,7 @@ def _collect_stock_rows(
                 years=years,
                 name="collection_rate",
                 default=0.4,
+                report_start_year=cfg.time.report_start_year,
             )
             collection_multiplier = (
                 coupled.indicators_ts["Coupling_collection_multiplier"].reindex(years).to_numpy(dtype=float)

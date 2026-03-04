@@ -313,3 +313,55 @@ def test_loader_normalizes_scenario_profiles_csv_globs(tmp_path: Path):
     assert loaded.scenario_profiles.enabled is True
     assert len(loaded.scenario_profiles.csv_globs) == 1
     assert Path(loaded.scenario_profiles.csv_globs[0]).is_absolute()
+
+
+def test_trade_od_removed_historical_window_keys_fail_fast(tmp_path: Path):
+    root = Path(__file__).resolve().parents[1]
+    cfg = tmp_path / "removed-trade-od-keys.yml"
+    _write_yaml(
+        cfg,
+        {
+            "name": "removed-trade-od-keys",
+            "includes": _core_includes(root),
+            "trade_od": {
+                "historical_window_start_year": 2010,
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="Removed trade_od key"):
+        load_run_config(cfg)
+
+
+def test_trade_od_legacy_sidecar_mode_fails_fast(tmp_path: Path):
+    root = Path(__file__).resolve().parents[1]
+    cfg = tmp_path / "removed-legacy-sidecar.yml"
+    _write_yaml(
+        cfg,
+        {
+            "name": "removed-legacy-sidecar",
+            "includes": _core_includes(root),
+            "trade_od": {
+                "runtime_mode": "legacy_sidecar",
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="has been removed"):
+        load_run_config(cfg)
+
+
+def test_trade_od_defaults_to_enabled_endogenous_mode(tmp_path: Path):
+    root = Path(__file__).resolve().parents[1]
+    cfg = tmp_path / "trade-od-defaults.yml"
+    _write_yaml(
+        cfg,
+        {
+            "name": "trade-od-defaults",
+            "includes": _core_includes(root),
+        },
+    )
+
+    loaded = load_run_config(cfg)
+    assert loaded.trade_od.enabled is True
+    assert loaded.trade_od.runtime_mode == "endogenous"

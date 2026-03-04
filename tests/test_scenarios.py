@@ -248,7 +248,9 @@ def test_mvp_transition_policy_and_demand_transformation_variant_schema():
         if isinstance(variant.transition_policy, dict)
         else variant.transition_policy.model_dump(exclude_none=True, exclude_unset=True)
     )
-    assert bool(tp["enabled"]) is True
+    assert isinstance(tp["enabled"], dict)
+    assert bool(tp["enabled"]["value"]) is True
+    assert bool(tp["enabled"]["before"]) is False
     assert int(tp["start_year"]) == 2026
     assert float(tp["adoption_target"]) > 0.0
     assert float(tp["collection_uplift_max"]) > 0.0
@@ -259,7 +261,9 @@ def test_mvp_transition_policy_and_demand_transformation_variant_schema():
         if isinstance(variant.demand_transformation, dict)
         else variant.demand_transformation.model_dump(exclude_none=True, exclude_unset=True)
     )
-    assert bool(dt["enabled"]) is True
+    assert isinstance(dt["enabled"], dict)
+    assert bool(dt["enabled"]["value"]) is True
+    assert bool(dt["enabled"]["before"]) is False
     assert str(dt["service_activity_source"]) == "service_activity"
     assert str(dt["material_intensity_source"]) == "material_intensity"
     assert float(dt["transition_adoption_weight"]) > 0.0
@@ -295,7 +299,9 @@ def test_demand_transformation_variant_has_expected_driver_surface():
         if isinstance(variant.demand_transformation, dict)
         else variant.demand_transformation.model_dump(exclude_none=True, exclude_unset=True)
     )
-    assert bool(dt["enabled"]) is True
+    assert isinstance(dt["enabled"], dict)
+    assert bool(dt["enabled"]["value"]) is True
+    assert bool(dt["enabled"]["before"]) is False
     assert str(dt["service_activity_source"]) == "service_activity"
     assert str(dt["material_intensity_source"]) == "material_intensity"
     assert float(dt["min_demand_multiplier"]) < float(dt["max_demand_multiplier"])
@@ -320,7 +326,9 @@ def test_mvp_import_squeeze_circular_ramp_variant_schema():
         if isinstance(variant.transition_policy, dict)
         else variant.transition_policy.model_dump(exclude_none=True, exclude_unset=True)
     )
-    assert bool(tp["enabled"]) is True
+    assert isinstance(tp["enabled"], dict)
+    assert bool(tp["enabled"]["value"]) is True
+    assert bool(tp["enabled"]["before"]) is False
     assert int(tp["start_year"]) == 2028
     assert float(tp["adoption_target"]) > 0.0
 
@@ -329,7 +337,9 @@ def test_mvp_import_squeeze_circular_ramp_variant_schema():
         if isinstance(variant.demand_transformation, dict)
         else variant.demand_transformation.model_dump(exclude_none=True, exclude_unset=True)
     )
-    assert bool(dt["enabled"]) is True
+    assert isinstance(dt["enabled"], dict)
+    assert bool(dt["enabled"]["value"]) is True
+    assert bool(dt["enabled"]["before"]) is False
     assert float(dt["transition_adoption_weight"]) > 0.0
 
     hit = resolve_variant_slice_overrides(
@@ -651,6 +661,78 @@ def test_runtime_clips_ramp_points_to_reporting_start():
     assert np.isclose(points[report_start_year], 0.45)
     assert np.isclose(points[2030], 0.55)
     assert np.isclose(float(ramp["before"]), 0.4)
+
+
+def test_runtime_gates_scalar_runtime_overrides_to_reporting_start():
+    years = list(range(1870, 2101))
+    report_start_year = 2020
+    variant_slice = {
+        "sd_parameters": {
+            "capacity_expansion_gain": 0.4,
+        },
+        "mfa_parameters": {},
+        "strategy": {},
+        "transition_policy": {},
+        "demand_transformation": {},
+        "shocks": {},
+    }
+    out = _enforce_reporting_phase_for_variant_slice(
+        variant_slice=variant_slice,
+        years=years,
+        report_start_year=report_start_year,
+        sd_base={"capacity_expansion_gain": 0.26},
+        mfa_base={},
+        strategy_base={},
+        transition_policy_base={},
+        demand_transformation_base={},
+        shocks_base={},
+    )
+    gate = out["sd_parameters"]["capacity_expansion_gain"]
+    assert int(gate["start_year"]) == report_start_year
+    assert np.isclose(float(gate["before"]), 0.26)
+    assert np.isclose(float(gate["value"]), 0.4)
+
+
+def test_runtime_gates_enabled_flags_but_keeps_source_selector_scalars():
+    years = list(range(1870, 2101))
+    report_start_year = 2020
+    variant_slice = {
+        "sd_parameters": {},
+        "mfa_parameters": {},
+        "strategy": {},
+        "transition_policy": {"enabled": True, "start_year": 2026},
+        "demand_transformation": {
+            "enabled": True,
+            "service_activity_source": "service_activity",
+            "material_intensity_source": "material_intensity",
+        },
+        "shocks": {},
+    }
+    out = _enforce_reporting_phase_for_variant_slice(
+        variant_slice=variant_slice,
+        years=years,
+        report_start_year=report_start_year,
+        sd_base={},
+        mfa_base={},
+        strategy_base={},
+        transition_policy_base={"enabled": False, "start_year": 2025},
+        demand_transformation_base={
+            "enabled": False,
+            "service_activity_source": "service_activity",
+            "material_intensity_source": "material_intensity",
+        },
+        shocks_base={},
+    )
+    tp_enabled = out["transition_policy"]["enabled"]
+    dt_enabled = out["demand_transformation"]["enabled"]
+    assert int(tp_enabled["start_year"]) == report_start_year
+    assert bool(tp_enabled["before"]) is False
+    assert bool(tp_enabled["value"]) is True
+    assert int(dt_enabled["start_year"]) == report_start_year
+    assert bool(dt_enabled["before"]) is False
+    assert bool(dt_enabled["value"]) is True
+    assert out["demand_transformation"]["service_activity_source"] == "service_activity"
+    assert out["demand_transformation"]["material_intensity_source"] == "material_intensity"
 
 
 def test_runtime_resolves_exogenous_ramp_reference_with_scope_precedence(tmp_path: Path):

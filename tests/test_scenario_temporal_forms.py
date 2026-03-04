@@ -9,7 +9,7 @@ from crm_model.scenario_profiles import (
 )
 
 
-def test_transition_policy_remains_scalar_surface_in_scenarios():
+def test_transition_policy_and_demand_transformation_enabled_are_reporting_gated_in_scenarios():
     root = Path(__file__).resolve().parents[1]
     mvp = load_run_config(root / "configs" / "runs" / "mvp.yml")
     variant = mvp.variants["transition_policy_acceleration"]
@@ -18,9 +18,21 @@ def test_transition_policy_remains_scalar_surface_in_scenarios():
         if isinstance(variant.transition_policy, dict)
         else variant.transition_policy.model_dump(exclude_none=True, exclude_unset=True)
     )
-    assert isinstance(tp["enabled"], bool)
-    assert isinstance(tp["start_year"], int)
-    assert isinstance(tp["adoption_target"], float)
+    dt = (
+        variant.demand_transformation
+        if isinstance(variant.demand_transformation, dict)
+        else variant.demand_transformation.model_dump(exclude_none=True, exclude_unset=True)
+    )
+    tp_enabled = tp["enabled"]
+    dt_enabled = dt["enabled"]
+    assert isinstance(tp_enabled, dict)
+    assert isinstance(dt_enabled, dict)
+    assert int(tp_enabled["start_year"]) == int(mvp.time.report_start_year)
+    assert int(dt_enabled["start_year"]) == int(mvp.time.report_start_year)
+    assert bool(tp_enabled["before"]) is False
+    assert bool(dt_enabled["before"]) is False
+    assert bool(tp_enabled["value"]) is True
+    assert bool(dt_enabled["value"]) is True
 
 
 def test_r02_family_uses_year_gated_demand_transformation_controls():

@@ -212,7 +212,7 @@ flowchart LR
     classDef coupling fill:#ede9fe,stroke:#7c3aed,stroke-width:1.2px,color:#111827;
     classDef outputs fill:#e0f2fe,stroke:#0284c7,stroke-width:1.2px,color:#111827;
 
-    class FD,EUS,PRO,PNI,SYL,RE,LT,SIO dataInput;
+    class FD,EUS,PRO,SYL,RE,LT,SIO dataInput;
     class SHK scenario;
     class SCAR,SCAR_EFF,PRICE,DMD,UTIL,BOT,SFILL,SREL,ENV,PEX,BEN,REF,FAB,USEP,COL,SORT,REM,REC,RTD,SPLIT,SDTRE,PRI,OUT,EOL,NSCRAP,SEC,DEL,UNM process;
     class CAPENV,STOCK,RSTOCK,STRAT,STKINUSE stock;
@@ -230,7 +230,8 @@ When `trade_od.enabled=true` and `trade_od.runtime_mode=endogenous`, trade is pa
 2. Solve: per material, outer iterations run SD-dMFA across all regions, build endogenous constraints, allocate OD flows, inject net trade back into MFA.
 3. Commodity channels: `concentrates`, `refined_metal`, `scrap`.
 4. Weights outside observed years: clamp+normalize.
-5. Outputs: `trade_od_flows.csv`, `trade_od_supplier_shares.csv`,
+5. Legacy historical-window and fallback keys are removed; runtime allocator is endogenous-only.
+6. Outputs: `trade_od_flows.csv`, `trade_od_supplier_shares.csv`,
    `trade_od_supplier_diversification.csv`,
    `trade_od_allocator_diagnostics.csv`, `trade_od_imports_exports.csv`,
    `trade_od_outer_loop_convergence.csv`.

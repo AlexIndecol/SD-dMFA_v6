@@ -48,7 +48,6 @@ def test_repo_layout_scaffold_files_exist():
         root / "configs" / "scenarios" / "mvp" / "surplus_build_drawdown.yml",
         root / "configs" / "scenarios" / "mvp" / "strategic_reserve_build_release.yml",
         root / "configs" / "scenarios" / "mvp" / "import_squeeze_circular_ramp.yml",
-        root / "configs" / "templates" / "sd_parameters_temporal_interface.yml",
         root / "data" / "exogenous" / "templates" / "service_activity_template.csv",
         root / "data" / "exogenous" / "templates" / "material_intensity_template.csv",
         root / "data" / "exogenous" / "supplier_governance_risk.csv",
@@ -75,6 +74,7 @@ def test_repo_layout_scaffold_files_exist():
         root / "scripts" / "analysis" / "audit_scenario_realism.py",
         root / "scripts" / "scenarios" / "build_reporting_timeseries_profiles.py",
         root / "scripts" / "validation" / "lint_run_configs.py",
+        root / "scripts" / "validation" / "check_reporting_preperiod_drift.py",
     ]
     missing = [str(p) for p in expected if not p.exists()]
     assert not missing, f"Missing scaffold files: {missing}"
@@ -152,7 +152,7 @@ def test_dimensions_symbols_and_stage_stock_config_are_loaded():
     assert cfg.dimensions.commodities == []
     assert cfg.dimensions.origin_regions == []
     assert cfg.dimensions.destination_regions == []
-    assert cfg.trade_od.enabled is False
+    assert cfg.trade_od.enabled is True
     assert cfg.trade_od.runtime_mode == "endogenous"
     assert cfg.trade_od.activation_phases == ["calibration", "reporting"]
     assert cfg.trade_od.commodities == ["concentrates", "refined_metal", "scrap"]

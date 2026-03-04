@@ -1,34 +1,22 @@
-# Interface Contract: Scenario Variant
-#
-# Section 1) Scope
-# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
-# - Applies to this file only; values are merged onto the active run baseline.
-#
-# Section 2) Required keys
-# - name: unique variant id used by CLI --variant selection.
-# - description: concise plain-language scenario intent.
-# - implementation: list[str] describing how config changes map to model behavior.
-#
-# Section 3) Optional override blocks
-# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
-# - Any omitted block inherits active values from run baseline and prior merge layers.
-#
-# Section 4) transition_policy semantics
-# - Builds an adoption stock with compliance delay and lag.
-# - Adoption can uplift collection/recycling and capacity response while reducing bottleneck gains.
-#
-# Section 5) demand_transformation semantics
-# - Uses optional exogenous drivers (service_activity/material_intensity) with scalar/year-gated/timeseries multipliers.
-# - Applies efficiency improvements and rebound, then clamps total demand multiplier.
-#
+# Scenario config: transition_policy_acceleration
+# Practical reading order: implementation -> global blocks -> dimension_overrides.
+# Keep overrides minimal and aligned with the mechanism being tested.
 name: transition_policy_acceleration
+# Short plain-language summary used in reporting and run metadata.
 description: Transition-policy acceleration with delayed adoption and compliance that strengthens recovery channels.
+# Mechanism checklist. These bullets should match the actual overrides below.
 implementation:
   - Transition adoption ramps from 2026 with compliance delay and multi-year lag.
   - Adoption increases collection and recycling performance and speeds capacity-response buildup.
   - Bottleneck amplification channels are progressively relieved as adoption matures.
+# Transition-policy loop controls adoption/compliance dynamics and derived uplifts.
 transition_policy:
-  enabled: true
+  enabled:
+    # Activation year for this temporal override/event.
+    start_year: 2020
+    value: true
+    before: false
+  # Activation year for this temporal override/event.
   start_year: 2026
   adoption_target: 0.85
   adoption_lag_years: 5.0
@@ -39,17 +27,25 @@ transition_policy:
   capacity_expansion_gain_uplift: 0.20
   bottleneck_relief_max: 0.35
 
+# Demand transformation decomposes demand into service-activity and material-intensity channels.
 demand_transformation:
-  enabled: true
+  enabled:
+    # Activation year for this temporal override/event.
+    start_year: 2020
+    value: true
+    before: false
   service_activity_source: service_activity
   material_intensity_source: material_intensity
   service_activity_multiplier:
+    # Activation year for this temporal override/event.
     start_year: 2026
     value: 1.04
   material_intensity_multiplier:
+    # Activation year for this temporal override/event.
     start_year: 2026
     value: 0.94
   efficiency_improvement:
+    # Activation year for this temporal override/event.
     start_year: 2026
     value: 0.08
   rebound_effect: 0.15
@@ -57,6 +53,7 @@ demand_transformation:
   min_demand_multiplier: 0.70
   max_demand_multiplier: 1.35
 
+# Slice-targeted overrides. Matching items are applied in the listed order.
 dimension_overrides:
   - name: nickel_eu27_policy_front_runner
     materials: [nickel]
@@ -69,6 +66,7 @@ dimension_overrides:
       bottleneck_relief_max: 0.42
     demand_transformation:
       efficiency_improvement:
+        # Activation year for this temporal override/event.
         start_year: 2026
         value: 0.10
       transition_adoption_weight: 0.80

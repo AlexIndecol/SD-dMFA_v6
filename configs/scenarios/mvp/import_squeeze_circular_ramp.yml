@@ -1,63 +1,40 @@
-# Interface Contract: Scenario Variant
-#
-# Section 1) Scope
-# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
-# - Applies to this file only; values are merged onto the active run baseline.
-#
-# Section 2) Required keys
-# - name: unique variant id used by CLI --variant selection.
-# - description: concise plain-language scenario intent.
-# - implementation: list[str] describing how config changes map to model behavior.
-#
-# Section 3) Optional override blocks
-# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
-# - Any omitted block inherits active values from run baseline and prior merge layers.
-#
-# Section 4) SD temporal values
-# - Applies to temporal-capable SD keys (for example sd_parameters.* and sd_heterogeneity.sd_parameters.*).
-# - Form A scalar (constant for all modeled years):
-#   key: 0.30
-# - Form B year-gated step (switches at start_year):
-#   key:
-#     start_year: 2025
-#     value: 0.35
-#     before: 0.30   # optional; if omitted, baseline is injected at runtime
-# - Form C full timeseries (explicit per-year values):
-#   key: [0.30, 0.30, 0.31, ...]
-# - Form D exogenous ramp reference (CSV-backed; resolves to temporal points at runtime):
-#   key:
-#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
-#     # optional selectors for explicit routing:
-#     # variant: example_variant
-#     # block: mfa_parameters
-#     # key: collection_rate
-#     # material: nickel
-#     # region: EU27
-# - Full timeseries length must equal modeled year count (time.start_year..time.end_year).
-# - Year-gates before report_start_year are shifted/clipped by reporting-phase enforcement.
-#
+# Scenario config: import_squeeze_circular_ramp
+# Practical reading order: implementation -> global blocks -> dimension_overrides.
+# Keep overrides minimal and aligned with the mechanism being tested.
 name: import_squeeze_circular_ramp
+# Short plain-language summary used in reporting and run metadata.
 description: External primary import squeeze followed by delayed circularity and policy ramp
   to test resilience recovery.
+# Mechanism checklist. These bullets should match the actual overrides below.
 implementation:
   - Stress window (2025-2035) reduces primary output and net imports while demand pressure remains elevated.
   - Response window (from 2028) activates transition-policy adoption and demand-transformation efficiency.
   - Exogenous demand-transformation ramps are encoded inline as exogenous_ramp CSV references under demand_transformation keys.
   - Recovery is assessed through bottleneck relaxation, service stabilization, and circular-supply strengthening.
 
+# SD loop tuning: scarcity-price-demand feedback and capacity/bottleneck behavior.
 sd_parameters:
   capacity_pressure_shortage_weight:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.82
   bottleneck_scarcity_gain:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.24
   bottleneck_collection_sensitivity:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 0.12
 
+# Transition-policy loop controls adoption/compliance dynamics and derived uplifts.
 transition_policy:
-  enabled: true
+  enabled:
+    # Activation year for this temporal override/event.
+    start_year: 2020
+    value: true
+    before: false
+  # Activation year for this temporal override/event.
   start_year: 2028
   adoption_target: 0.72
   adoption_lag_years: 5.0
@@ -68,50 +45,76 @@ transition_policy:
   capacity_expansion_gain_uplift: 0.16
   bottleneck_relief_max: 0.28
 
+# Demand transformation decomposes demand into service-activity and material-intensity channels.
 demand_transformation:
-  enabled: true
+  enabled:
+    # Activation year for this temporal override/event.
+    start_year: 2020
+    value: true
+    before: false
   service_activity_source: service_activity
   material_intensity_source: material_intensity
   service_activity_multiplier:
+    # Activation year for this temporal override/event.
     start_year: 2025
     value: 1.05
   material_intensity_multiplier:
+    # Reads anchor points from profile CSV and expands to modeled years.
     exogenous_ramp: data/ramp_profiles/mvp/import_squeeze_circular_ramp.csv
   efficiency_improvement:
+    # Reads anchor points from profile CSV and expands to modeled years.
     exogenous_ramp: data/ramp_profiles/mvp/import_squeeze_circular_ramp.csv
   rebound_effect:
+    # Activation year for this temporal override/event.
     start_year: 2028
     value: 0.17
   transition_adoption_weight: 0.7
   min_demand_multiplier: 0.65
   max_demand_multiplier: 1.25
 
+# Shock events use step parameters: start_year, duration_years, multiplier.
 shocks:
   demand_surge:
+    # Activation year for this temporal override/event.
     start_year: 2025
+    # Event duration in years (inclusive step window).
     duration_years: 11
+    # Multiplies the baseline channel while the event is active.
     multiplier: 1.15
   primary_refined_output:
+    # Activation year for this temporal override/event.
     start_year: 2025
+    # Event duration in years (inclusive step window).
     duration_years: 11
+    # Multiplies the baseline channel while the event is active.
     multiplier: 0.88
   trade_refined_import_need_multiplier:
+    # Activation year for this temporal override/event.
     start_year: 2025
+    # Event duration in years (inclusive step window).
     duration_years: 11
+    # Multiplies the baseline channel while the event is active.
     multiplier: 0.68
 
+# Slice-targeted overrides. Matching items are applied in the listed order.
 dimension_overrides:
   - name: nickel_eu27_deeper_import_squeeze
     materials: [nickel]
     regions: [EU27]
     shocks:
       primary_refined_output:
+        # Activation year for this temporal override/event.
         start_year: 2025
+        # Event duration in years (inclusive step window).
         duration_years: 11
+        # Multiplies the baseline channel while the event is active.
         multiplier: 0.82
       trade_refined_import_need_multiplier:
+        # Activation year for this temporal override/event.
         start_year: 2025
+        # Event duration in years (inclusive step window).
         duration_years: 11
+        # Multiplies the baseline channel while the event is active.
         multiplier: 0.55
     transition_policy:
       adoption_target: 0.8
@@ -120,8 +123,10 @@ dimension_overrides:
       bottleneck_relief_max: 0.34
     demand_transformation:
       material_intensity_multiplier:
+        # Reads anchor points from profile CSV and expands to modeled years.
         exogenous_ramp: data/ramp_profiles/mvp/import_squeeze_circular_ramp.csv
       efficiency_improvement:
+        # Activation year for this temporal override/event.
         start_year: 2028
         value: 0.13
   - name: row_slower_policy_ramp
@@ -131,5 +136,6 @@ dimension_overrides:
       adoption_lag_years: 6.5
     demand_transformation:
       material_intensity_multiplier:
+        # Activation year for this temporal override/event.
         start_year: 2028
         value: 0.94

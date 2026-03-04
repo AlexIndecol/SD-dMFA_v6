@@ -40,8 +40,6 @@ from crm_model.data import (
     load_supplier_governance_risk,
     load_stage_yields_losses,
     load_stock_in_use,
-    load_trade_od_constraints,
-    load_trade_od_observed,
     load_trade_od_weights,
     material_intensity_t,
     primary_refined_output_tr,
@@ -77,7 +75,6 @@ from crm_model.trade import (
     prepare_trade_weights_for_runtime,
     run_trade_od_allocator,
     validate_trade_od_runtime_weights,
-    validate_trade_od_sources,
 )
 from crm_model.utils import archive_old_timestamped_runs, scenario_variant_root
 
@@ -226,6 +223,42 @@ def _clip_ramp_points_to_reporting(value: Dict[str, Any], report_start_year: int
     out = dict(value)
     out["points"] = {int(k): float(clipped[k]) for k in sorted(clipped.keys())}
     return out
+
+
+def _as_python_scalar(value: Any) -> Any:
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            return value
+    return value
+
+
+def _should_reporting_gate_scalar(
+    *,
+    block_name: str,
+    key: str,
+    value: Any,
+) -> bool:
+    # Exempt selector metadata that should stay as plain strings.
+    if block_name == "demand_transformation" and key in {
+        "service_activity_source",
+        "material_intensity_source",
+    }:
+        return False
+    if isinstance(value, (str, bytes)) or value is None:
+        return False
+
+    is_bool = isinstance(value, (bool, np.bool_))
+    is_num = isinstance(value, (int, float, np.integer, np.floating)) and not is_bool
+    if not (is_bool or is_num):
+        return False
+
+    if block_name in {"sd_parameters", "mfa_parameters", "strategy"}:
+        return True
+    if block_name in {"transition_policy", "demand_transformation"}:
+        return key == "enabled" and is_bool
+    return False
 
 
 def _resolve_exogenous_ramp_csv_path(*, repo_root: Path, raw_path: Any) -> Path:
@@ -465,6 +498,7 @@ def _enforce_reporting_only_temporal_mapping(
     baseline: Dict[str, Any] | None,
     years: List[int],
     report_start_year: int,
+    block_name: str,
 ) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     baseline_map = baseline or {}
@@ -508,6 +542,7 @@ def _enforce_reporting_only_temporal_mapping(
                 baseline=base_val if isinstance(base_val, dict) else {},
                 years=years,
                 report_start_year=report_start_year,
+                block_name=block_name,
             )
             continue
 
@@ -522,6 +557,18 @@ def _enforce_reporting_only_temporal_mapping(
                     gated["before"] = base_val
                 out[key] = gated
                 continue
+
+        if _should_reporting_gate_scalar(block_name=block_name, key=str(key), value=value):
+            gated = {
+                "start_year": int(report_start_year),
+                "value": _as_python_scalar(value),
+            }
+            if base_val is not None:
+                gated["before"] = _as_python_scalar(base_val)
+            elif isinstance(value, (bool, np.bool_)):
+                gated["before"] = False
+            out[key] = gated
+            continue
 
         out[key] = value
     return out
@@ -545,36 +592,42 @@ def _enforce_reporting_phase_for_variant_slice(
         baseline=sd_base,
         years=years,
         report_start_year=report_start_year,
+        block_name="sd_parameters",
     )
     out["mfa_parameters"] = _enforce_reporting_only_temporal_mapping(
         overrides=out.get("mfa_parameters", {}),
         baseline=mfa_base,
         years=years,
         report_start_year=report_start_year,
+        block_name="mfa_parameters",
     )
     out["strategy"] = _enforce_reporting_only_temporal_mapping(
         overrides=out.get("strategy", {}),
         baseline=strategy_base,
         years=years,
         report_start_year=report_start_year,
+        block_name="strategy",
     )
     out["transition_policy"] = _enforce_reporting_only_temporal_mapping(
         overrides=out.get("transition_policy", {}),
         baseline=transition_policy_base,
         years=years,
         report_start_year=report_start_year,
+        block_name="transition_policy",
     )
     out["demand_transformation"] = _enforce_reporting_only_temporal_mapping(
         overrides=out.get("demand_transformation", {}),
         baseline=demand_transformation_base,
         years=years,
         report_start_year=report_start_year,
+        block_name="demand_transformation",
     )
     out["shocks"] = _enforce_reporting_only_temporal_mapping(
         overrides=out.get("shocks", {}),
         baseline=shocks_base,
         years=years,
         report_start_year=report_start_year,
+        block_name="shocks",
     )
     return out
 
@@ -950,11 +1003,9 @@ def run_one_variant(
     trade_runtime_endogenous = (
         bool(getattr(trade_od_cfg, "enabled", False))
         and trade_phase_active
-        and str(getattr(trade_od_cfg, "runtime_mode", "legacy_sidecar")) == "endogenous"
+        and str(getattr(trade_od_cfg, "runtime_mode", "endogenous")) == "endogenous"
     )
-    trade_od_observed_df = None
     trade_od_weights_df = None
-    trade_od_constraints_df = None
     trade_od_runtime_weights_df = None
     supplier_governance_risk_df = None
     if "supplier_governance_risk" in vars_:
@@ -988,31 +1039,6 @@ def run_one_variant(
             commodities=trade_od_cfg.commodities,
             policy=str(getattr(trade_od_cfg, "weight_extrapolation_policy", "clamp_normalize")),
         )
-        obs_src = getattr(trade_od_cfg, "observed_flow_source", None)
-        con_src = getattr(trade_od_cfg, "constraints_source", None)
-        if obs_src and obs_src in vars_:
-            obs_path = _resolve_exogenous_path(repo_root, vars_[obs_src].path)
-            if obs_path.exists():
-                trade_od_observed_df, _ = _load_table_cached(obs_path, load_trade_od_observed)
-        if con_src and con_src in vars_:
-            con_path = _resolve_exogenous_path(repo_root, vars_[con_src].path)
-            if con_path.exists():
-                trade_od_constraints_df, _ = _load_table_cached(con_path, load_trade_od_constraints)
-        if (
-            not trade_runtime_endogenous
-            and trade_od_observed_df is not None
-            and trade_od_weights_df is not None
-            and trade_od_constraints_df is not None
-        ):
-            validate_trade_od_sources(
-                observed_flows=trade_od_observed_df,
-                weights=trade_od_weights_df,
-                constraints=trade_od_constraints_df,
-                materials=[m.name for m in dims.materials],
-                regions=dims.regions,
-                commodities=trade_od_cfg.commodities,
-            )
-
     years_key = tuple(int(y) for y in years)
     calibration_years_key = tuple(int(y) for y in time.calibration_years)
     end_uses_key = tuple(str(eu) for eu in dims.end_uses)
@@ -1628,13 +1654,10 @@ def run_one_variant(
                 materials=materials_order,
                 regions=regions_order,
                 commodities=commodities_order,
-                observed_flows=trade_od_observed_df,
                 weights=trade_od_runtime_weights_df,
                 constraints=constraints_all,
                 sd_capacity_envelope_by_material_region=iter_sd_capacity_by_material_region,
                 supplier_governance_risk=supplier_governance_risk_df,
-                historical_window_start_year=int(trade_od_cfg.historical_window_start_year),
-                historical_window_end_year=int(trade_od_cfg.historical_window_end_year),
                 capacity_cap_hybrid_mode=str(trade_od_cfg.capacity_cap_hybrid_mode),
                 capacity_cap_sd_multiplier=float(trade_od_cfg.capacity_cap_sd_multiplier),
                 coupling_relax_lambda_0_1=float(trade_od_cfg.coupling_relax_lambda_0_1),
@@ -2255,74 +2278,6 @@ def run_one_variant(
             )
     if cap_rows:
         trade_artifacts["sd_capacity_envelope_by_slice"] = pd.DataFrame(cap_rows)
-    if (
-        bool(getattr(trade_od_cfg, "enabled", False))
-        and trade_od_observed_df is not None
-        and trade_od_weights_df is not None
-        and trade_od_constraints_df is not None
-    ):
-        trade_out = run_trade_od_allocator(
-            years=years,
-            materials=[m.name for m in dims.materials],
-            regions=dims.regions,
-            commodities=list(trade_od_cfg.commodities),
-            observed_flows=trade_od_observed_df,
-            weights=trade_od_weights_df,
-            constraints=trade_od_constraints_df,
-            sd_capacity_envelope_by_material_region=sd_capacity_by_material_region,
-            supplier_governance_risk=supplier_governance_risk_df,
-            historical_window_start_year=int(trade_od_cfg.historical_window_start_year),
-            historical_window_end_year=int(trade_od_cfg.historical_window_end_year),
-            capacity_cap_hybrid_mode=str(trade_od_cfg.capacity_cap_hybrid_mode),
-            capacity_cap_sd_multiplier=float(trade_od_cfg.capacity_cap_sd_multiplier),
-            coupling_relax_lambda_0_1=float(trade_od_cfg.coupling_relax_lambda_0_1),
-            max_reallocation_passes=int(trade_od_cfg.allocator_max_reallocation_passes),
-        )
-        if not trade_out.flows.empty:
-            trade_artifacts["trade_od_flows"] = trade_out.flows.assign(phase=phase, variant=variant_name)
-            trade_artifacts["trade_od_supplier_shares"] = trade_out.supplier_shares.assign(
-                phase=phase,
-                variant=variant_name,
-            )
-            trade_artifacts["trade_od_supplier_diversification"] = trade_out.supplier_diversification.assign(
-                phase=phase,
-                variant=variant_name,
-            )
-            trade_artifacts["trade_od_allocator_diagnostics"] = trade_out.diagnostics.assign(
-                phase=phase,
-                variant=variant_name,
-            )
-            trade_artifacts["trade_od_imports_exports"] = trade_out.imports_exports.assign(
-                phase=phase,
-                variant=variant_name,
-            )
-            keep_years_trade = years if phase in {"calibration"} else report_years
-            div_keep = trade_out.supplier_diversification[
-                trade_out.supplier_diversification["year"].isin(set(keep_years_trade))
-            ].copy()
-            trade_indicator_cols = {
-                "supplier_hhi_0_1": "Supplier_HHI",
-                "supplier_diversification_0_1": "Supplier_Diversification",
-                "effective_supplier_count": "Supplier_Effective_suppliers",
-                "supplier_governance_risk_weighted_0_1": "Supplier_Governance_risk_weighted",
-            }
-            for col_name, ind_name in trade_indicator_cols.items():
-                if ind_name not in allowed_ts or col_name not in div_keep.columns:
-                    continue
-                sub = div_keep[["year", "material", "region", col_name]].copy()
-                sub = sub[sub[col_name].notna()]
-                for row in sub.itertuples(index=False):
-                    ts_rows.append(
-                        {
-                            "phase": phase,
-                            "variant": variant_name,
-                            "material": str(row.material),
-                            "region": str(row.region),
-                            "year": int(row.year),
-                            "indicator": ind_name,
-                            "value": float(getattr(row, col_name)),
-                        }
-                    )
 
     with _CACHE_LOCK:
         _LAST_TRADE_OD_ARTIFACTS[(phase, variant_name)] = trade_artifacts

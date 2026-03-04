@@ -1,24 +1,14 @@
-# Interface Contract: End-Use Dimensions
-#
-# Section 1) Scope
-# - Defines modeled end-use axis and optional detailed end-use alias axis.
-#
-# Section 2) Required keys
-# - dimension: {name, symbol}
-# - end_uses: non-empty list used by model dimensions and exogenous demand shares.
-#
-# Section 3) Optional keys
-# - end_use_detailed_dimension
-# - end_use_detailed
-#
+# Modeled end-use axis (`e`) and optional detailed alias axis (`ed`).
 dimension:
   name: end_use
   symbol: e
 
+# Optional detailed dimension for future disaggregation and mapping tables.
 end_use_detailed_dimension:
   name: end_use_detailed
   symbol: ed
 
+# Canonical modeled end-use labels used in demand shares and stock outputs.
 end_uses:
   - construction
   - computers_and_precision_instruments
@@ -29,4 +19,5 @@ end_uses:
   - products_nec
 
 # Reserved for expanded MFA system definition.
+# Keep empty unless a mapping in end_use_detail.yml is actively used.
 end_use_detailed: []

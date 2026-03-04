@@ -1,43 +1,44 @@
-# Interface Contract: Calibration Policy
-#
-# Section 1) Scope
-# - Controls objective, windows, bounds, optimization settings, and outputs
-#   for calibration scripts.
-#
-# Section 2) Required top-level keys
-# - version, objective, windows, parameters, optimization, selection,
-#   constraints, outputs.
-#
+# Stock calibration policy (objective, windows, search space, and outputs).
 version: 1
 
 objective:
+  # Objective id consumed by calibration script.
   id: weighted_stock_rmse
+  # Runtime indicator to compare against observed data.
   target_variable: stock_in_use
   target_source: data/exogenous/stock_in_use.csv
   description: >
     Minimize weighted RMSE between modeled and observed stock-in-use
     over the calibration training window.
   aggregation:
+    # Aggregate modeled end-use stocks before matching observations.
     over_end_uses: sum
+    # Weighted average over material-region slices.
     over_material_region: weighted_mean
+    # Slice weights are proportional to mean observed stock.
     weight_basis: mean_observed_stock
   missing_data:
+    # Pairs with NaN in either modeled or observed series are dropped.
     policy: ignore_nan_pairs
     min_required_years_per_material_region: 20
 
 windows:
+  # Train window drives optimization steps.
   train:
     start_year: 1870
     end_year: 1999
+  # Validation window decides best promoted candidate.
   validation:
     start_year: 2000
     end_year: 2019
+  # Holdout years are kept out of fit metrics.
   reporting_holdout:
     start_year: 2020
     end_year: 2100
 
 parameters:
   mfa:
+    # `path` points to key in run config that optimizer mutates.
     fabrication_yield:
       path: mfa_parameters.fabrication_yield
       initial: 0.8823678465694136
@@ -61,15 +62,18 @@ parameters:
 
 optimization:
   global_search:
+    # Main search pass; broad exploration.
     method: differential_evolution
     max_evaluations: 120
     popsize: 8
     seed: 42
   local_refinement:
+    # Optional local polish after global pass.
     enabled: false
     method: nelder_mead
     max_evaluations: 10
   stopping:
+    # Stop if improvement plateaus.
     min_improvement: 5.0e-4
     patience_rounds: 2
 
@@ -88,6 +92,7 @@ selection:
     max_train_weighted_nrmse: null
 
 constraints:
+  # Hard feasibility bounds; candidate is rejected if any rule is violated.
   hard:
     - "0 < fabrication_yield <= 1"
     - "0 <= collection_rate <= 1"
@@ -96,6 +101,7 @@ constraints:
     - "lifetime_multiplier > 0"
 
 outputs:
+  # Save artifacts needed for promotion/rollback workflow.
   save_trial_history_csv: true
   save_best_config_patch_yml: true
   save_validation_summary_csv: true

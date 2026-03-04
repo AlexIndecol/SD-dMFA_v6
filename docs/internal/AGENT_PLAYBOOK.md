@@ -8,8 +8,7 @@ Operational contract for this repo. Priorities: runnable, explicit, reproducible
 Ask before deciding anything that can materially affect results (units, boundaries, mappings, lifetimes, calibration targets, scenario semantics, trade interpretation).
 
 If a placeholder is required to keep execution alive, it must be:
-- declared under `TEMP` in `configs/assumptions.yml`
-- documented in `docs/governance/ASSUMPTIONS.md` (impact + removal path)
+- documented under `TEMP` in `docs/governance/MODEL_GOVERNANCE.md` (impact + removal path)
 - exported in run artifacts (`assumptions_used.yml`)
 
 ### 1.2 Stop-the-run validation
@@ -42,7 +41,7 @@ Prefer framework-native implementations first:
 Custom code is acceptable only if native options are insufficient or clearly reduce clarity.
 
 If custom code is used, record rationale in:
-- `docs/governance/DECISION_LOG.md`
+- `docs/governance/MODEL_GOVERNANCE.md`
 - `docs/governance/RISKS.md`
 - `docs/governance/CHANGELOG.md`
 
@@ -66,7 +65,7 @@ Each sweep must list:
 - dMFA graph: `configs/stages.yml`
 - coupling wiring: `configs/coupling.yml`
 - indicators: `configs/indicators.yml`
-- assumptions: `configs/assumptions.yml`
+- assumptions and persistent decisions: `docs/governance/MODEL_GOVERNANCE.md`
 - reserved mapping: `configs/end_use_detail_mapping.yml`
 
 Run configs should follow core+overlay structure:
@@ -105,7 +104,7 @@ Required artifacts:
 2. Keep canonical symbols consistent: `t` (time), `r` (region), `m` (material), `e` (end_use), `ed` (end_use_detailed), `p` (stage), `q` (quality); optional OD-trade placeholders: `c` (commodity), `o` (origin region), `d` (destination region).
 3. Update affected exogenous CSVs + registry entries.
 4. Run validator.
-5. Update `DECISION_LOG`, `ASSUMPTIONS`, `RISKS`, `CHANGELOG`.
+5. Update `MODEL_GOVERNANCE`, `RISKS`, `CHANGELOG`.
 
 ### 5.2 dMFA graph change
 1. Edit `configs/stages.yml`.
@@ -119,7 +118,7 @@ Required artifacts:
    - `stock_in_use`
    - `refinery_stockpile_native`
 5. Run validator + smoke run.
-6. Update `DECISION_LOG`, `RISKS`, `COUPLED_MODEL_FLOWCHART`, `CHANGELOG`.
+6. Update `MODEL_GOVERNANCE`, `RISKS`, `COUPLED_MODEL_FLOWCHART`, `CHANGELOG`.
 
 ### 5.3 Coupling boundary change (SD <-> dMFA)
 1. Update relevant files:
@@ -132,7 +131,7 @@ Required artifacts:
 3. Run:
    - `python scripts/validation/validate_exogenous_inputs.py --config <config.yml>`
    - `python -m crm_model.cli --config <config.yml> --variant baseline --phase reporting`
-4. Update `DECISION_LOG` and `CHANGELOG`.
+4. Update `MODEL_GOVERNANCE` and `CHANGELOG`.
 
 ### 5.4 New exogenous variable
 1. Add registry entry (`path`, `required`, `columns`, `unit`, constraints).
@@ -190,7 +189,10 @@ SD controls (in `sd_parameters`):
 ## 6) Hygiene
 
 - never rely silently on `TEMP` defaults
-- if dimensions/variables/schema/units/indicators change: update validators, docs/templates, and `CHANGELOG`
+- if dimensions/variables/schema/units/indicators change: update validators, `docs/workflows/CONFIGS.md`, and `CHANGELOG`
+- if documentation links/canonical mappings change, run:
+  - `python scripts/validation/lint_docs_links.py`
+  - `python scripts/validation/check_docs_dedup.py --min-length 220 --max-occurrences 1`
 - never commit caches/build artifacts (`__pycache__`, `*.pyc`, `dist/`, `build/`, `.venv/`)
 - prefer explicit failures over silent fallbacks
 - keep tests runnable (`pytest`)

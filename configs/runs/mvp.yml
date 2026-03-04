@@ -1,7 +1,12 @@
+# Thin overlay for the MVP scenario pack.
+# This file should stay minimal: include selection + small run-level deltas.
 name: "Tin\u2013Zinc\u2013Nickel | EU27\u2013China\u2013RoW | Coupled SD\u2013dMFA\
   \ (loose iterative | mvp)"
+# Inherit canonical defaults from `_core.yml`.
 extends: ./_core.yml
 includes:
+  # Load all MVP scenarios by glob.
   scenarios: ../scenarios/mvp/*.yml
 strategy:
+  # Example thin delta: slower secondary stockpile release than `_core`.
   refinery_stockpile_release_rate: 0.15

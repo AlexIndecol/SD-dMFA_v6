@@ -1,127 +1,151 @@
-# Interface Contract: Scenario Variant
-#
-# Section 1) Scope
-# - File type: scenario variant loaded via includes.scenarios globs/files or inline run variants.
-# - Applies to this file only; values are merged onto the active run baseline.
-#
-# Section 2) Required keys
-# - name: unique variant id used by CLI --variant selection.
-# - description: concise plain-language scenario intent.
-# - implementation: list[str] describing how config changes map to model behavior.
-#
-# Section 3) Optional override blocks
-# - sd_parameters, mfa_parameters, strategy, transition_policy, demand_transformation, shocks, dimension_overrides.
-# - Any omitted block inherits active values from run baseline and prior merge layers.
-#
-# Section 4) dimension_overrides item schema
-# - name?, materials?, regions?, sd_parameters?, mfa_parameters?, strategy?, shocks?.
-# - Filters default to all materials/regions when omitted.
-# - Multiple matching items are applied in file order.
-#
-# Section 5) SD temporal values
-# - Applies to temporal-capable SD keys (for example sd_parameters.* and sd_heterogeneity.sd_parameters.*).
-# - Form A scalar (constant for all modeled years):
-#   key: 0.30
-# - Form B year-gated step (switches at start_year):
-#   key:
-#     start_year: 2025
-#     value: 0.35
-#     before: 0.30   # optional; if omitted, baseline is injected at runtime
-# - Form C full timeseries (explicit per-year values):
-#   key: [0.30, 0.30, 0.31, ...]
-# - Form D exogenous ramp reference (CSV-backed; resolves to temporal points at runtime):
-#   key:
-#     exogenous_ramp: data/ramp_profiles/mvp/example_variant.csv
-#     # optional selectors for explicit routing:
-#     # variant: example_variant
-#     # block: mfa_parameters
-#     # key: collection_rate
-#     # material: nickel
-#     # region: EU27
-# - Full timeseries length must equal modeled year count (time.start_year..time.end_year).
-# - Year-gates before report_start_year are shifted/clipped by reporting-phase enforcement.
-#
+# Scenario config: recycling_disruption
+# Practical reading order: implementation -> global blocks -> dimension_overrides.
+# Keep overrides minimal and aligned with the mechanism being tested.
 name: recycling_disruption
+# Short plain-language summary used in reporting and run metadata.
 description: Global recycling-system disruption with explicit regional severity
   overrides across EU27, China, and RoW.
+# Mechanism checklist. These bullets should match the actual overrides below.
 implementation:
 - Applies a global recycling disruption during 2025-2039.
 - Regional overrides for EU27, China, and RoW tune disruption depth and trade/circular-routing pressure.
+# Shock events use step parameters: start_year, duration_years, multiplier.
 shocks:
   recycling_disruption:
+    # Activation year for this temporal override/event.
     start_year: 2025
+    # Event duration in years (inclusive step window).
     duration_years: 15
+    # Multiplies the baseline channel while the event is active.
     multiplier: 0.8
+# Slice-targeted overrides. Matching items are applied in the listed order.
 dimension_overrides:
+# Override item: define scope first, then local block deltas.
 - name: eu27_disruption
+  # Region filter for this override item. Omit to match all regions.
   regions:
   - EU27
   shocks:
     recycling_disruption:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.55
     trade_refined_import_need_multiplier:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.75
     collection_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.92
+    # Routing-triad note: keep recycling + remanufacturing + disposal normalized.
     recycling_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.88
+    # Routing-triad note: keep recycling + remanufacturing + disposal normalized.
     remanufacturing_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.92
+# Override item: define scope first, then local block deltas.
 - name: china_disruption
+  # Region filter for this override item. Omit to match all regions.
   regions:
   - China
   shocks:
     recycling_disruption:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.65
     trade_refined_import_need_multiplier:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.82
     collection_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.94
+    # Routing-triad note: keep recycling + remanufacturing + disposal normalized.
     recycling_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.9
+    # Routing-triad note: keep recycling + remanufacturing + disposal normalized.
     remanufacturing_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.94
+# Override item: define scope first, then local block deltas.
 - name: row_disruption
+  # Region filter for this override item. Omit to match all regions.
   regions:
   - RoW
   shocks:
     recycling_disruption:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.75
     trade_refined_import_need_multiplier:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.88
     collection_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.96
+    # Routing-triad note: keep recycling + remanufacturing + disposal normalized.
     recycling_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.93
+    # Routing-triad note: keep recycling + remanufacturing + disposal normalized.
     remanufacturing_rate:
+      # Activation year for this temporal override/event.
       start_year: 2025
+      # Event duration in years (inclusive step window).
       duration_years: 15
+      # Multiplies the baseline channel while the event is active.
       multiplier: 0.96

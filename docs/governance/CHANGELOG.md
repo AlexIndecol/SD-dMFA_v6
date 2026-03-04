@@ -1,5 +1,73 @@
 # Changelog
 
+## Document position
+
+- You are here: Tier 2 canonical historical chronology.
+- Canonical scope: chronological record of implemented repository changes.
+- Out of scope: current-valid governance assumptions (use `MODEL_GOVERNANCE.md`) and risk definitions (use `RISKS.md`).
+- Related docs: [MODEL_GOVERNANCE.md](./MODEL_GOVERNANCE.md), [RISKS.md](./RISKS.md), [docs/README.md](../README.md)
+
+## 0.10.56
+- Removed OD legacy/unused compatibility surfaces:
+  - `trade_od.runtime_mode=legacy_sidecar` is no longer accepted by config schema.
+  - `trade_od.historical_window_*` and `trade_od.fallback_mode_outside_window` are no longer accepted by config schema.
+- Simplified OD allocator runtime API:
+  - removed unused historical-window arguments from `run_trade_od_allocator` and updated all internal call sites.
+- Removed sidecar execution path from CLI runtime; OD runtime now executes only in endogenous mode.
+- Cleaned active run/config docs:
+  - removed historical-window/fallback keys from `configs/trade.yml` and `configs/trade_od_runtime_enabled.yml`.
+  - updated architecture/OD/governance/glossary docs to reflect sidecar/fallback removal and current runtime behavior.
+
+## 0.10.55
+- Fixed unintended pre-2020 drift from ramp-based strategy overrides:
+  - `src/crm_model/mfa/run_mfa.py` now injects baseline `before` for missing ramp-point overrides (same as year-gates).
+- Migrated legacy non-baseline `before` anchors in:
+  - `data/ramp_profiles/mvp/circularity_push.csv`
+  - removed explicit scenario-level pre-period `before` values so reporting pre-period inherits baseline.
+- Added warning-only pre-period drift diagnostics:
+  - new script `scripts/validation/check_reporting_preperiod_drift.py`
+  - compares latest scenario runs vs latest baseline for years `< report_start_year`,
+  - writes diagnostics CSVs and emits warnings without failing execution.
+- Added unit coverage for MFA strategy ramp baseline-injection behavior:
+  - `tests/test_mfa_module_split.py`
+
+## 0.10.54
+- Consolidated governance assumptions and persistent decisions into one canonical file:
+  - `docs/governance/MODEL_GOVERNANCE.md` (logical structure, de-duplicated, current-valid only).
+- Added stable risk identifiers in `docs/governance/RISKS.md` and cross-referenced them from the governance source.
+- Removed legacy governance files (no stubs).
+- Updated docs references to the canonical governance source and removed stale assumptions-config references.
+
+## 0.10.53
+- Consolidated config interface contracts into a single source:
+  - new `docs/workflows/CONFIGS.md` now defines core, overlay, variant, temporal, precedence, and registry interfaces.
+- Removed duplicated contract sources:
+  - removed the legacy config-precedence workflow page (precedence and temporal rules are now inside `docs/workflows/CONFIGS.md`),
+  - removed config interface template files.
+- Simplified YAML comments across `configs/**/*.yml` and `registry/variable_registry.yml`:
+  - removed long contract headers,
+  - kept practical local comments only (examples, formulas, and editing reminders).
+- Updated docs/tests to use the new canonical source:
+  - docs now point to `docs/workflows/CONFIGS.md`,
+  - scaffold test no longer expects the removed config-template scaffold file.
+
+## 0.10.52
+- Enforced reporting-year-only scenario activation in runtime for reporting runs:
+  - temporal forms (year-gate/ramp/timeseries) remain clipped/gated to `report_start_year`,
+  - runtime-impact scalar scenario overrides are now reporting-gated by block,
+  - selector strings (`demand_transformation.service_activity_source`, `material_intensity_source`) remain plain scalars.
+- Normalized scenario YAMLs to explicitly reporting-gate `enabled` flags:
+  - `transition_policy.enabled`
+  - `demand_transformation.enabled`
+  - applied across `mvp` and `r-strategies` scenario files where those channels are activated.
+- Added run-scoped OD trade runtime include:
+  - new file `configs/trade_od_runtime_enabled.yml` (same tuned OD controls as `configs/trade.yml`, `enabled: true`),
+  - wired in `configs/runs/mvp.yml` and `configs/runs/r-strategies.yml` via `includes.trade_od`.
+- Added/updated tests for:
+  - reporting-gated scalar runtime overrides,
+  - reporting-gated `enabled` flags with source-selector pass-through,
+  - updated run-config expectation for trade runtime activation in `mvp`.
+
 ## 0.10.51
 - Promoted calibration patches to active baseline config surfaces:
   - `configs/runs/_core.yml` (shared stock parameters)
@@ -177,7 +245,7 @@
 - Added an end-to-end execution quickstart:
   - `docs/getting-started/QUICKSTART.md` with validation, run, and analysis commands.
 - Added explicit config merge and temporal-resolution reference:
-  - `docs/workflows/CONFIG_PRECEDENCE.md`.
+  - `docs/workflows/CONFIGS.md`.
 - Added operational failure diagnosis guide:
   - `docs/getting-started/TROUBLESHOOTING.md` including non-convergence and activation-floor failure interpretation.
 - Added scenario implementation runbook:
@@ -191,7 +259,7 @@
 - Updated `docs/workflows/SCENARIOS.md`:
   - added authoring workflow and minimum acceptance checks.
 - Updated SD-dynamics interpretation docs:
-  - `docs/model/SD_CAPACITY_SCARCITY_PRICE_LOOP.md` now documents interactions with stockpile, strategic reserve, coupling signals, and tuning diagnostics.
+  - `docs/model/SD_MODEL.md` documents interactions with stockpile, strategic reserve, coupling signals, and tuning diagnostics.
   - `docs/workflows/CALIBRATION.md` now adds staged guidance on when/how to include SD dynamics in calibration.
 
 ## 0.10.40
@@ -206,7 +274,7 @@
   - `strategy.collection_multiplier_{min,max,lag_years}` now fail fast; controls must be set in `sd_parameters`.
 - Updated tests/config fixtures to canonical SD naming only.
 - Added explicit modeling guide for the endogenous capacity-scarcity-price loop with bottleneck delays:
-  - `docs/model/SD_CAPACITY_SCARCITY_PRICE_LOOP.md`
+  - `docs/model/SD_MODEL.md`
   - linked from `docs/model/ARCHITECTURE.md` and scenario documentation.
 
 ## 0.10.38
